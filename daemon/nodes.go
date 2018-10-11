@@ -67,10 +67,10 @@ func flavorFromVersion(version string) (string, error) {
 	}
 
 	var minorS string
-	if 5-minor < 0 {
-		minorS = "0"
-	} else {
+	if 5-minor <= 0 {
 		minorS = "5"
+	} else {
+		minorS = "0"
 	}
 
 	flavor, ok := versionToFlavor[major][minorS]
@@ -111,6 +111,8 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 			"com.couchbase.dyncluster.node_name":              opts.Name,
 			"com.couchbase.dyncluster.initial_server_version": opts.ServerVersion,
 		},
+		// same effect as ntp
+		Volumes: map[string]struct{}{ "/etc/localtime:/etc/localtime": {} },
 	}, &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: "macvlan0",
