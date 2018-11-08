@@ -169,6 +169,7 @@ func (m *Manager) pollJoinReadyAll(epnode *Node) error {
 		go n.PollJoinReady(chErr)
 		size++
 	}
+	if size == 0 { return nil }
 	finished := 0
 
 	for {

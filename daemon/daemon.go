@@ -227,7 +227,9 @@ func Start() {
 
 	// Start listening now
 	log.Printf("Daemon is starting on %s", restServer.Addr)
-	restServer.ListenAndServe()
+	if err = restServer.ListenAndServe(); err != nil {
+		log.Printf("Error:%s", err)
+	}
 
 	// Signal all our running goroutines to shut down
 	shutdownSig <- struct{}{}
