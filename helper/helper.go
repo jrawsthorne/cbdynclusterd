@@ -67,7 +67,7 @@ const (
 	Domain             = "/domain"
 	DomainPostfix      = ".couchbase.com"
 
-	DockerFilePath = "deps/sdkqe-resource/dockerfiles/"
+	DockerFilePath = "dockerfiles/"
 
 )
 
@@ -322,17 +322,6 @@ func GetResponse(params *RestCall) (string, error) {
 
 	client := &http.Client{Timeout: RestTimeout}
 	url := fmt.Sprintf("http://%s:%d%s", login.Hostname, login.Port, path)
-	// ** debug
-
-	if path == PSetupServices {
-		a := "a"
-		b := a
-		a = b
-	/*	buf := new(bytes.Buffer)
-		buf.ReadFrom(postBody)
-		a = buf.String()
-		b = a*/
-	}
 
 	req, err := http.NewRequest(method, url, strings.NewReader(postBody))
 	if err != nil { return "", err }

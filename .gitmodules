@@ -1,3 +1,0 @@
-[submodule "deps/sdkqe-resource"]
-	path = deps/sdkqe-resource
-	url = https://github.com/couchbaselabs/sdkqe-resource
