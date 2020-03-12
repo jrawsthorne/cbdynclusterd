@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ReleaseUrl = "http://172.23.120.24/builds/releases/"
-	BuildUrl = "http://172.23.120.24/builds/latestbuilds/couchbase-server/";
+	ReleaseUrl = "http://latestbuilds.service.couchbase.com/builds/releases/"
+	BuildUrl = "http://latestbuilds.service.couchbase.com/builds/latestbuilds/couchbase-server/";
 )
 
 func Install(nodes []*Node, version, build string, isEnterprise bool) {
@@ -49,9 +49,9 @@ func runNode(wg *sync.WaitGroup, node *Node, version, build string, isEnterprise
 
 func buildUrl(version, build string, isEnterprise bool, osInfo *OsInfo) string {
 	// version format could be like 4.6.3(released), 5.5.0-beta(released) or 5.5.0(not released)
-	//http://172.23.120.24/builds/releases/4.6.3/couchbase-server-enterprise-4.6.3                                   -centos7.x86_64.rpm
-	//http://172.23.120.24/builds/releases/5.5.0-beta/couchbase-server-enterprise-5.5.0-beta                         -centos7.x86_64.rpm
-	//http://172.23.120.24/builds/latestbuilds/couchbase-server/vulcan/2345/couchbase-server-community-5.5.0-2345    -centos7.x86_64.rpm
+	//http://latestbuilds.service.couchbase.com/builds/releases/4.6.3/couchbase-server-enterprise-4.6.3                                   -centos7.x86_64.rpm
+	//http://latestbuilds.service.couchbase.com/builds/releases/5.5.0-beta/couchbase-server-enterprise-5.5.0-beta                         -centos7.x86_64.rpm
+	//http://latestbuilds.service.couchbase.com/builds/latestbuilds/couchbase-server/vulcan/2345/couchbase-server-community-5.5.0-2345    -centos7.x86_64.rpm
 
 	var urlStr, flavor, buildType string
 

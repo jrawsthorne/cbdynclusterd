@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/golang/glog"
 )
 var NetworkName = "macvlan0"
@@ -50,9 +51,9 @@ func (nv *NodeVersion) toPkgName() string {
 func (nv *NodeVersion) toURL() string {
 	// If there's no build number specified then the target is a release
 	if nv.Build == "" {
-		return fmt.Sprintf("http://172.23.120.24/builds/releases/%s", nv.Version)
+		return fmt.Sprintf("%s%s", cluster.ReleaseUrl, nv.Version)
 	}
-	return fmt.Sprintf("http://172.23.120.24/builds/latestbuilds/couchbase-server/%s/%s", nv.Flavor, nv.Build)
+	return fmt.Sprintf("%s%s/%s", cluster.BuildUrl, nv.Flavor, nv.Build)
 }
 
 var versionToFlavor = map[string]map[string]string{

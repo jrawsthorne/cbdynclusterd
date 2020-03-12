@@ -9,7 +9,7 @@ if [ "$BUILD" = "ga" ]; then
 	--build-arg BUILD_NO=${BUILD} \
 	--build-arg FLAVOR=${FLAVOR} \
 	--build-arg BUILD_PKG=couchbase-server-enterprise-$VERSION-centos7.x86_64.rpm \
-	--build-arg BASE_URL=http://172.23.120.24/builds/releases/$VERSION/$BUILD_PKG \
+	--build-arg BASE_URL=http://latestbuilds.service.couchbase.com/builds/releases/$VERSION/$BUILD_PKG \
 	-t couchbase_${VERSION}-${BUILD}.centos7 .
 else
 	docker build \
