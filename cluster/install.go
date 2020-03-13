@@ -1,15 +1,15 @@
 package cluster
 
 import (
-	"sync"
-	"github.com/golang/glog"
 	"bytes"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/golang/glog"
+	"sync"
 )
 
 var (
 	ReleaseUrl = "http://latestbuilds.service.couchbase.com/builds/releases/"
-	BuildUrl = "http://latestbuilds.service.couchbase.com/builds/latestbuilds/couchbase-server/";
+	BuildUrl   = "http://latestbuilds.service.couchbase.com/builds/latestbuilds/couchbase-server/"
 )
 
 func Install(nodes []*Node, version, build string, isEnterprise bool) {
@@ -31,17 +31,21 @@ func runNode(wg *sync.WaitGroup, node *Node, version, build string, isEnterprise
 		filename := "opcode-attributes.json"
 		glog.Infof("Copying %s", filename)
 		err := node.ScpToRemote(filename, "/root/")
-		if err != nil { glog.Fatalf("Cannot copy %s to remote node: %s", filename, err)}
+		if err != nil {
+			glog.Fatalf("Cannot copy %s to remote node: %s", filename, err)
+		}
 	}
 	dlUrl := buildUrl(version, build, isEnterprise, &osInfo)
 
 	filename := "cluster-install.py"
 	glog.Infof("Copying %s to %s", filename, node.HostName)
 	err := node.ScpToRemote("../../"+filename, "/root/")
-	if err != nil { glog.Fatalf("Cannot copy %s to remote node: %s", filename, err) }
+	if err != nil {
+		glog.Fatalf("Cannot copy %s to remote node: %s", filename, err)
+	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	err = node.RunSsh(&stdoutBuf, &stderrBuf, "python " + filename + " " + dlUrl)
+	err = node.RunSsh(&stdoutBuf, &stderrBuf, "python "+filename+" "+dlUrl)
 	if err != nil {
 		glog.Fatalf("Failed installing %s:%s", dlUrl, err)
 	}
@@ -61,7 +65,7 @@ func buildUrl(version, build string, isEnterprise bool, osInfo *OsInfo) string {
 	}
 
 	if len(build) == 0 {
-		urlStr = ReleaseUrl+version+"/couchbase-server-"+buildType+"-"+version+"-"
+		urlStr = ReleaseUrl + version + "/couchbase-server-" + buildType + "-" + version + "-"
 	} else {
 		major, minor, _ := helper.Tuple(version)
 		if major == 4 {
@@ -83,10 +87,10 @@ func buildUrl(version, build string, isEnterprise bool, osInfo *OsInfo) string {
 				flavor = "mad-hatter"
 			}
 		}
-		urlStr = BuildUrl+flavor+"/"+build+"/couchbase-server-"+buildType+"-"+version+"-"+build+"-"
+		urlStr = BuildUrl + flavor + "/" + build + "/couchbase-server-" + buildType + "-" + version + "-" + build + "-"
 	}
 
-	urlStr += osInfo.Platform+"."+osInfo.Arch+"."+osInfo.PackageType
+	urlStr += osInfo.Platform + "." + osInfo.Arch + "." + osInfo.PackageType
 	return urlStr
 
 }

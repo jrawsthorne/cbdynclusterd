@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/couchbaselabs/cbdynclusterd/cluster"
+	"github.com/couchbaselabs/cbdynclusterd/helper"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/golang/glog"
 )
+
 var NetworkName = "macvlan0"
 
 type NodeOptions struct {
@@ -57,9 +58,9 @@ func (nv *NodeVersion) toURL() string {
 }
 
 var versionToFlavor = map[string]map[string]string{
-	"4": map[string]string{"0": "sherlock", "5": "watson"},
-	"5": map[string]string{"0": "spock", "5": "vulcan"},
-	"6": map[string]string{"0": "alice", "5": "mad-hatter"},
+	"4": {"0": "sherlock", "5": "watson"},
+	"5": {"0": "spock", "5": "vulcan"},
+	"6": {"0": "alice", "5": "mad-hatter"},
 }
 
 func flavorFromVersion(version string) (string, error) {
@@ -120,11 +121,11 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 			"com.couchbase.dyncluster.initial_server_version": opts.ServerVersion,
 		},
 		// same effect as ntp
-		Volumes: map[string]struct{}{ "/etc/localtime:/etc/localtime": {} },
+		Volumes: map[string]struct{}{"/etc/localtime:/etc/localtime": {}},
 	}, &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode(NetworkName),
-		DNS: dns,
+		DNS:         dns,
 	}, nil, containerName)
 	if err != nil {
 		return "", err
@@ -140,7 +141,7 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 	}
 	ipv4 := containerJSON.NetworkSettings.Networks[NetworkName].IPAddress
 	ipv6 := containerJSON.NetworkSettings.Networks[NetworkName].GlobalIPv6Address
-	containerHostName := containerName+".couchbase.com"
+	containerHostName := containerName + ".couchbase.com"
 	if ipv4 != "" {
 		glog.Infof("register %s => %s on %s\n", ipv4, containerHostName, dnsHostFlag)
 		body, err := registerDomainName(containerHostName, ipv4)
@@ -156,17 +157,17 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 }
 
 // assign hostname to the IP in DNS server
-func registerDomainName(hostname, ip string) (string, error){
-	restParam := &helper.RestCall {
+func registerDomainName(hostname, ip string) (string, error) {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		ContentType: "application/json",
-		Method: "PUT",
-		Cred: &helper.Cred {
+		ContentType:  "application/json",
+		Method:       "PUT",
+		Cred: &helper.Cred{
 			Hostname: dnsHostFlag,
-			Port: 80,
+			Port:     80,
 		},
-		Path: helper.Domain+"/"+hostname,
-		Body: "{\"ips\":[\""+ip+"\"]}",
+		Path: helper.Domain + "/" + hostname,
+		Body: "{\"ips\":[\"" + ip + "\"]}",
 	}
 	return helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 }

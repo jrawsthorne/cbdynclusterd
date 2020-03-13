@@ -1,25 +1,24 @@
 package cluster
 
 import (
-	"github.com/golang/glog"
-	"strings"
-	"strconv"
-	"os"
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
-	"sync"
 	"fmt"
-	"time"
-	"bytes"
-	"io"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/golang/glog"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
-
 var (
-	Version *string
-	Build   *string
+	Version     *string
+	Build       *string
 	MemoryQuota *string
 )
 
@@ -29,21 +28,21 @@ const (
 )
 
 type Manager struct {
-	Nodes []*Node
+	Nodes  []*Node
 	Config Config
 	epNode int
 }
 
 type Pools struct {
-	Name string `json:name`
-	Uri  string `json:uri`
+	Name         string `json:name`
+	Uri          string `json:uri`
 	StreamingUri string `json:streamingUri`
 }
 
 type RefInfo struct {
-	ClusterVersion string `json:"implementationVersion"`
-	Pools []Pools `json:"pools""`
-	ClusterId     string
+	ClusterVersion string  `json:"implementationVersion"`
+	Pools          []Pools `json:"pools""`
+	ClusterId      string
 }
 
 type VersionTuple struct {
@@ -85,7 +84,7 @@ func (m *Manager) ScpToLocal(hostname, src, dest string) error {
 			return nn.ScpToLocal(src, dest)
 		}
 	}
-	return errors.New("Can not find matching host"+hostname)
+	return errors.New("Can not find matching host" + hostname)
 }
 
 func (m *Manager) ScpToLocalDir(hostname, src, dest string) error {
@@ -94,7 +93,7 @@ func (m *Manager) ScpToLocalDir(hostname, src, dest string) error {
 			return nn.ScpToLocalDir(src, dest)
 		}
 	}
-	return errors.New("Can not find matching host"+hostname)
+	return errors.New("Can not find matching host" + hostname)
 }
 
 func (m *Manager) StartCluster() (string, error) {
@@ -104,10 +103,14 @@ func (m *Manager) StartCluster() (string, error) {
 	// Ensure we can connect to the REST port
 	for _, n := range m.Nodes {
 		info, err := n.GetInfo()
-		if err != nil { return "", err }
+		if err != nil {
+			return "", err
+		}
 
 		err = json.Unmarshal([]byte(info), &refInfo)
-		if err != nil { return "", err }
+		if err != nil {
+			return "", err
+		}
 
 		if refInfo.Pools != nil && len(refInfo.Pools) > 0 {
 			refInfo.ClusterId = refInfo.Pools[0].Uri
@@ -127,7 +130,9 @@ func (m *Manager) StartCluster() (string, error) {
 	if len(existingCluster) > 0 {
 		for _, n := range existingCluster {
 			err := clearSingleCluster(n)
-			if err != nil { return "", err }
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 	wg := sync.WaitGroup{}
@@ -147,8 +152,10 @@ func (m *Manager) Rebalance() error {
 
 	// in case rebalance fails, just try one more time
 	numRetry := 2
-	for i := 0 ; i < numRetry; i++ {
-		if err := epnode.Rebalance(nil, nil, nil); err != nil { return err }
+	for i := 0; i < numRetry; i++ {
+		if err := epnode.Rebalance(nil, nil, nil); err != nil {
+			return err
+		}
 		err := epnode.PollRebalance()
 		if err == nil {
 			break
@@ -166,11 +173,15 @@ func (m *Manager) pollJoinReadyAll(epnode *Node) error {
 	chErr := make(chan error)
 	size := 0
 	for i, n := range m.Nodes {
-		if i == m.epNode {continue}
+		if i == m.epNode {
+			continue
+		}
 		go n.PollJoinReady(chErr)
 		size++
 	}
-	if size == 0 { return nil }
+	if size == 0 {
+		return nil
+	}
 	finished := 0
 
 	for {
@@ -192,36 +203,54 @@ func (m *Manager) setupNewCluster() (string, error) {
 	m.epNode = 0 // select the first node as entry point
 	epnode := m.Nodes[m.epNode]
 	version, err := getVersion(epnode)
-	if err != nil { return "", err}
+	if err != nil {
+		return "", err
+	}
 
 	memoryQuota, err := strconv.Atoi(m.Config.MemoryQuota)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	glog.Infof("Set data memory quota to %d", memoryQuota)
-	if err := epnode.SetupMemoryQuota(memoryQuota); err != nil { return "", err }
+	if err := epnode.SetupMemoryQuota(memoryQuota); err != nil {
+		return "", err
+	}
 
 	if m.Config.UseHostname {
 		glog.Infof("Set hostname to entry point node")
-		if err := epnode.Rename(epnode.HostName); err != nil { return "", err }
+		if err := epnode.Rename(epnode.HostName); err != nil {
+			return "", err
+		}
 	}
 
 	glog.Info("SetupInititalService")
-	if err := epnode.SetupInitialService(); err != nil { return "", err }
+	if err := epnode.SetupInitialService(); err != nil {
+		return "", err
+	}
 
-	if err := epnode.InitNewCluster(m.Config); err != nil { return "", err }
+	if err := epnode.InitNewCluster(m.Config); err != nil {
+		return "", err
+	}
 
-	if version.Major >=5 && len(m.Config.User.Name) > 0 {
+	if version.Major >= 5 && len(m.Config.User.Name) > 0 {
 		glog.Info("CreateUser")
-		if err := epnode.CreateUser(m.Config.User); err != nil { return "", err }
+		if err := epnode.CreateUser(m.Config.User); err != nil {
+			return "", err
+		}
 	}
 
 	// check if rest of nodes are ready to join the cluster
-	if err := m.pollJoinReadyAll(epnode); err != nil { return "", err }
+	if err := m.pollJoinReadyAll(epnode); err != nil {
+		return "", err
+	}
 	for i, n := range m.Nodes {
-		if i == m.epNode { continue }
+		if i == m.epNode {
+			continue
+		}
 		glog.Infof("Adding %s to %s", n.HostName, epnode.HostName)
 		if err := epnode.AddNode(n, n.Services); err != nil {
 			if strings.Contains(err.Error(), "Prepare join failed. Got HTTP status 500 from REST call") {
-				time.Sleep(5*time.Second)
+				time.Sleep(5 * time.Second)
 				glog.Infof("Adding %s to %s again", n.HostName, epnode.HostName)
 				err = epnode.AddNode(n, n.Services)
 			}
@@ -233,8 +262,10 @@ func (m *Manager) setupNewCluster() (string, error) {
 
 	// in case rebalance fails, just try one more time
 	numRetry := 2
-	for i := 0 ; i < numRetry; i++ {
-		if err := epnode.Rebalance(nil, nil, nil); err != nil { return "", err }
+	for i := 0; i < numRetry; i++ {
+		if err := epnode.Rebalance(nil, nil, nil); err != nil {
+			return "", err
+		}
 		err := epnode.PollRebalance()
 		if err == nil {
 			glog.Infof("setupNewCluster() Rebalance completed")
@@ -257,14 +288,18 @@ func (m *Manager) setupNewCluster() (string, error) {
 	return fmt.Sprintf("http://%s:%s", epnode.HostName, epnode.Port), nil
 }
 
-func getVersion (node *Node) (*VersionTuple, error) {
+func getVersion(node *Node) (*VersionTuple, error) {
 	var refInfo RefInfo
 	node.Update(false)
 	info, err := node.GetInfo()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	err = json.Unmarshal([]byte(info), &refInfo)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	version := refInfo.ClusterVersion
 
@@ -275,7 +310,7 @@ func getVersion (node *Node) (*VersionTuple, error) {
 	major, _ := strconv.Atoi(parsed[0])
 	minor, _ := strconv.Atoi(parsed[1])
 	patch, _ := strconv.Atoi(parsed[2])
-	return &VersionTuple {
+	return &VersionTuple{
 		Major: major,
 		Minor: minor,
 		Patch: patch,
@@ -287,13 +322,15 @@ func (m *Manager) PollCompressionMode(bucket, mode string) error {
 	return epnode.PollCompressionMode(bucket, mode)
 }
 
-func getEpNode (force bool, nodes []*Node) (*Node, error) {
+func getEpNode(force bool, nodes []*Node) (*Node, error) {
 	// select epnode (entry point node)
 	var epnode *Node
 	for _, n := range nodes {
 		n.Update(force) // get "nodes" array from the response of /pools/nodes
 		membership, err := n.Membership()
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		if membership == Active {
 			epnode = n
 			break
@@ -305,7 +342,7 @@ func getEpNode (force bool, nodes []*Node) (*Node, error) {
 	return epnode, nil
 }
 
-func getFtsNode (force bool, nodes []*Node) (*Node, error) {
+func getFtsNode(force bool, nodes []*Node) (*Node, error) {
 	return getServiceNode(force, "fts", nodes)
 }
 
@@ -319,12 +356,12 @@ func getServiceNode(force bool, service string, nodes []*Node) (*Node, error) {
 		}
 	}
 	if svcNode == nil {
-		return nil, errors.New("Could not find "+service+" nodes")
+		return nil, errors.New("Could not find " + service + " nodes")
 	}
 	return svcNode, nil
 }
 
-func getN1qlNode (force bool, nodes []*Node) (*Node, error) {
+func getN1qlNode(force bool, nodes []*Node) (*Node, error) {
 	return getServiceNode(force, "n1ql", nodes)
 }
 
@@ -333,28 +370,34 @@ func clearSingleCluster(nodes []*Node) error {
 	epnode, err := getEpNode(true, nodes)
 
 	buckets, err := epnode.GetBuckets()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	for _, b := range *buckets {
 		err = epnode.DeleteBucket(b.Name)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 
 	// Fail over and Eject
 	err = epnode.FailOverAndEjectAll(&helper.Cred{
 		Hostname: epnode.HostName,
-		Port: helper.RestPort,
+		Port:     helper.RestPort,
 		Username: RestUsername,
 		Password: RestPassword,
 	})
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	// reset master node
 
 	glog.Infof("Reset the master node")
 	cmd := "curl -d 'gen_server:cast(ns_cluster, leave).' -u "
 	cmd += RestUsername + ":" + RestPassword
-	cmd += " http://localhost:8091/diag/eval";
+	cmd += " http://localhost:8091/diag/eval"
 	var stdoutBuf, stderrBuf bytes.Buffer
 	err = epnode.RunSsh(&stdoutBuf, &stderrBuf, cmd)
 
@@ -363,21 +406,29 @@ func clearSingleCluster(nodes []*Node) error {
 	for {
 		n, err := stdoutBuf.Read(buff)
 		glog.Infof("%q", buff[:n])
-		if err == io.EOF { break }
+		if err == io.EOF {
+			break
+		}
 	}
 	return err
 }
 
 func (m *Manager) CreateUser(cred *helper.UserOption) error {
 	epNode, err := getEpNode(false, m.Nodes)
-	if err != nil { return err }
-	if err = epNode.CreateUser(cred); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if err = epNode.CreateUser(cred); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (m *Manager) CreateFtsIndex(name, bucketType, bucketName string) error {
 	ftsNode, err := getFtsNode(false, m.Nodes)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if err := ftsNode.CreateFtsIndex(name, bucketType, bucketName); err != nil {
 		// try with next fts node
 		if strings.Contains(err.Error(), "failed to connect to or retrieve information from source") {
@@ -409,7 +460,9 @@ func newNodesExcept(nodes []*Node, except *Node) []*Node {
 
 func (m *Manager) NetworkReset() error {
 	epNode, err := getEpNode(false, m.Nodes)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if err = epNode.NetworkReset(); err != nil {
 		return err
 	}
@@ -418,7 +471,9 @@ func (m *Manager) NetworkReset() error {
 
 func (m *Manager) NetworkDelay() error {
 	epNode, err := getEpNode(false, m.Nodes)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if err = epNode.NetworkDelay(); err != nil {
 		return err
 	}
@@ -432,31 +487,42 @@ func (m *Manager) GetEntryPoint() string {
 
 func (m *Manager) CreateN1qlIndex(name, fields, bucket string) error {
 	n1qlNode, err := getN1qlNode(false, m.Nodes)
-	if err != nil { return err }
-	if err := n1qlNode.CreateN1qlIndex(name, fields, bucket); err != nil { return err}
+	if err != nil {
+		return err
+	}
+	if err := n1qlNode.CreateN1qlIndex(name, fields, bucket); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (m *Manager) ChangeBucketCompression(bucket, mode string) error {
-	if err := m.Nodes[m.epNode].ChangeBucketCompression(bucket, mode); err != nil { return err }
+	if err := m.Nodes[m.epNode].ChangeBucketCompression(bucket, mode); err != nil {
+		return err
+	}
 	return m.Nodes[m.epNode].WaitForBucketReady()
 }
 
 func (m *Manager) SetupBucket(bucketName, bucketType, bucketPassword string) error {
 	var bType string
 	switch bucketType {
-		case "memcached": bType = helper.BucketMemcached
-		case "ephemeral": bType = helper.BucketEphemeral
-		default: bType = helper.BucketCouchbase
+	case "memcached":
+		bType = helper.BucketMemcached
+	case "ephemeral":
+		bType = helper.BucketEphemeral
+	default:
+		bType = helper.BucketCouchbase
 	}
-	bc := Bucket {
-		Name: bucketName,
-		Type: bType,
-		RamQuotaMB: "256",
-		ReplicaCount: 1,
+	bc := Bucket{
+		Name:              bucketName,
+		Type:              bType,
+		RamQuotaMB:        "256",
+		ReplicaCount:      1,
 		EphEvictionPolicy: "noEviction",
 	}
-	if err := m.Nodes[m.epNode].CreateBucket(&bc); err != nil { return err }
+	if err := m.Nodes[m.epNode].CreateBucket(&bc); err != nil {
+		return err
+	}
 
 	return m.Nodes[m.epNode].WaitForBucketReady()
 
@@ -482,18 +548,20 @@ func fromSpec(host, port, version, services string) *Node {
 	nPort := 8091
 	if len(port) > 0 {
 		num, err := strconv.Atoi(port)
-		if err != nil { panic (err)}
+		if err != nil {
+			panic(err)
+		}
 		nPort = num
 	}
-	nodeHost := &Node {
-		HostName: host,
-		Port: strconv.Itoa(nPort),
-		SshLogin: &helper.Cred { Username: "root", Password: "couchbase", Hostname: host, Port: 22 },
-		RestLogin: &helper.Cred { Username: RestUsername, Password: RestPassword, Hostname: host, Port: nPort },
-		N1qlLogin: &helper.Cred { Username: RestUsername, Password: RestPassword, Hostname: host, Port: 8093 },
-		FtsLogin: &helper.Cred { Username: RestUsername, Password: RestPassword, Hostname: host, Port: 8094 },
-		Version: version,
-		Services: services,
+	nodeHost := &Node{
+		HostName:  host,
+		Port:      strconv.Itoa(nPort),
+		SshLogin:  &helper.Cred{Username: "root", Password: "couchbase", Hostname: host, Port: 22},
+		RestLogin: &helper.Cred{Username: RestUsername, Password: RestPassword, Hostname: host, Port: nPort},
+		N1qlLogin: &helper.Cred{Username: RestUsername, Password: RestPassword, Hostname: host, Port: 8093},
+		FtsLogin:  &helper.Cred{Username: RestUsername, Password: RestPassword, Hostname: host, Port: 8094},
+		Version:   version,
+		Services:  services,
 	}
 
 	return nodeHost
@@ -504,7 +572,9 @@ func parse(iniFileName string) ([]string, error) {
 
 	file, err := os.Open(iniFileName)
 
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
@@ -512,12 +582,16 @@ func parse(iniFileName string) ([]string, error) {
 	// currently we parse only 'node'
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line[0] == '#' { continue }
+		if line[0] == '#' {
+			continue
+		}
 		lineSlice := strings.Split(strings.TrimSpace(line), "=")
 		if len(lineSlice) == 2 && lineSlice[0] == "node" {
 			parsed = append(parsed, lineSlice[1])
 		}
 	}
-	if err := scanner.Err(); err != nil { return nil, err}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
 	return parsed, nil
 }

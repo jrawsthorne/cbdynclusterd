@@ -1,52 +1,52 @@
 package helper
 
 import (
-	"fmt"
-	"os"
-	"flag"
-	"regexp"
-	"errors"
-	"time"
-	"net/http"
 	"encoding/base64"
-	"github.com/golang/glog"
-	"io/ioutil"
-	"strconv"
+	"errors"
+	"flag"
+	"fmt"
 	"github.com/couchbase/gocb"
 	"github.com/couchbase/gocb/cbft"
+	"github.com/golang/glog"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 var (
-	IniFile        *string
-	Slowlog        bool
-	RestRetry = 60
-	RestTimeout = 60*time.Second
-	WaitTimeout = 30*time.Second
-	restInterval = 3*time.Second
-	PattActual, _ = regexp.Compile("\\s*vb_active_itm_memory:\\s*([0-9]+)")
-	PattActualReplica, _ = regexp.Compile("\\s*vb_replica_itm_memory:\\s*([0-9]+)")
-	PattUncompressed, _ = regexp.Compile("\\s*vb_active_itm_memory_uncompressed:\\s*([0-9]+)")
+	IniFile                    *string
+	Slowlog                    bool
+	RestRetry                  = 60
+	RestTimeout                = 60 * time.Second
+	WaitTimeout                = 30 * time.Second
+	restInterval               = 3 * time.Second
+	PattActual, _              = regexp.Compile("\\s*vb_active_itm_memory:\\s*([0-9]+)")
+	PattActualReplica, _       = regexp.Compile("\\s*vb_replica_itm_memory:\\s*([0-9]+)")
+	PattUncompressed, _        = regexp.Compile("\\s*vb_active_itm_memory_uncompressed:\\s*([0-9]+)")
 	PattUncompressedReplica, _ = regexp.Compile("\\s*vb_replica_itm_memory_uncompressed:\\s*([0-9]+)")
-	StopWorkload = false
-	WorkloadRunTime = 10*time.Second
-	WorkloadRampTime = 10*time.Second
+	StopWorkload               = false
+	WorkloadRunTime            = 10 * time.Second
+	WorkloadRampTime           = 10 * time.Second
 )
 
 const (
-	SshPort              = 22
-	RestPort             = 8091
-	N1qlPort             = 8093
-	FtsPort              = 8094
-	SshUser              = "root"
-	SshPass              = "couchbase"
-	RestUser             = "Administrator"
-	RestPass             = "password"
-	BucketCouchbase      = "membase"
-	BucketMemcached      = "memcached"
-	BucketEphemeral      = "ephemeral"
-	PPools               = "/pools"
-	PRebalanceStop       = "/controller/stopRebalance"
+	SshPort            = 22
+	RestPort           = 8091
+	N1qlPort           = 8093
+	FtsPort            = 8094
+	SshUser            = "root"
+	SshPass            = "couchbase"
+	RestUser           = "Administrator"
+	RestPass           = "password"
+	BucketCouchbase    = "membase"
+	BucketMemcached    = "memcached"
+	BucketEphemeral    = "ephemeral"
+	PPools             = "/pools"
+	PRebalanceStop     = "/controller/stopRebalance"
 	PPoolsNodes        = "/pools/nodes"
 	PBuckets           = "/pools/default/buckets"
 	PFailover          = "/controller/failOver"
@@ -64,22 +64,21 @@ const (
 	PFts               = "/api/index"
 	PRename            = "/node/controller/rename"
 
-	Domain             = "/domain"
-	DomainPostfix      = ".couchbase.com"
+	Domain        = "/domain"
+	DomainPostfix = ".couchbase.com"
 
 	DockerFilePath = "dockerfiles/"
-
 )
 
 type UserOption struct {
-	Name string
+	Name     string
 	Password string
-	Roles *[]string
+	Roles    *[]string
 }
 
 type BucketOption struct {
-	Name string
-	Type string
+	Name     string
+	Type     string
 	Password string
 }
 
@@ -88,7 +87,7 @@ type stop struct {
 }
 
 type SubFields struct {
-	SubValue string
+	SubValue       string
 	RecurringField string
 }
 
@@ -99,10 +98,10 @@ type KvData struct {
 
 type MemUsedStats struct {
 	Uncompressed int
-	Used int
+	Used         int
 }
 
-func (m *MemUsedStats) Diff () int {
+func (m *MemUsedStats) Diff() int {
 	return m.Uncompressed - m.Used
 }
 
@@ -116,13 +115,13 @@ type Cred struct {
 
 type RestCall struct {
 	ExpectedCode int
-	RetryOnCode int
-	Method string
-	Path string
-	Cred *Cred
-	Body string
-	Header map[string]string
-	ContentType string
+	RetryOnCode  int
+	Method       string
+	Path         string
+	Cred         *Cred
+	Body         string
+	Header       map[string]string
+	ContentType  string
 }
 
 func Usage() {
@@ -134,15 +133,19 @@ func Usage() {
 }
 
 func LoadData(bucketName, ep, username, password string, numItems int) (*gocb.Bucket, error) {
-	goCluster, err := gocb.Connect("couchbase://"+ep)
+	goCluster, err := gocb.Connect("couchbase://" + ep)
 	glog.Infof("connect to %s, %s with %s %s", ep, bucketName, username, password)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	goCluster.Authenticate(gocb.PasswordAuthenticator{
 		Username: username,
 		Password: password,
 	})
 	bucket, err := goCluster.OpenBucket(bucketName, "")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	for i := 0; i < numItems; i++ {
 		if err := Upsert(bucket, i); err != nil {
@@ -166,10 +169,10 @@ func Get(bucket *gocb.Bucket, i int) error {
 
 func Upsert(bucket *gocb.Bucket, i int) error {
 	_, err := bucket.Upsert(strconv.Itoa(i),
-		KvData {
-			PropValue: "SampleValue"+strconv.Itoa(i),
-			SubFields: SubFields {
-				SubValue: "SampleSubvalue"+strconv.Itoa(i),
+		KvData{
+			PropValue: "SampleValue" + strconv.Itoa(i),
+			SubFields: SubFields{
+				SubValue:       "SampleSubvalue" + strconv.Itoa(i),
 				RecurringField: "RecurringSubvalue",
 			},
 		}, 0)
@@ -178,7 +181,9 @@ func Upsert(bucket *gocb.Bucket, i int) error {
 
 func Remove(bucket *gocb.Bucket, i int) error {
 	key := strconv.Itoa(i)
-	if _, err := bucket.Remove(key, 0); err != nil { return err }
+	if _, err := bucket.Remove(key, 0); err != nil {
+		return err
+	}
 
 	var val string
 	if _, err := bucket.Get(key, &val); err != nil {
@@ -187,7 +192,7 @@ func Remove(bucket *gocb.Bucket, i int) error {
 		}
 		return err
 	} else {
-		return errors.New("key "+key+" is expected to be removed but exists!")
+		return errors.New("key " + key + " is expected to be removed but exists!")
 	}
 }
 
@@ -201,7 +206,7 @@ func RemoveKeyIfExists(bucket *gocb.Bucket, key string) error {
 			return err
 		}
 	} else {
-		_, err := bucket.Remove(key,0)
+		_, err := bucket.Remove(key, 0)
 		return err
 	}
 }
@@ -228,7 +233,7 @@ func N1qlWorkload(bucket *gocb.Bucket, numItems int, chErr chan error) {
 func FtsWorkload(bucket *gocb.Bucket, ftsIndexName string, numItems int, chErr chan error) {
 	valIndex := 0
 	for !StopWorkload {
-		valIndex = (valIndex+1) % numItems
+		valIndex = (valIndex + 1) % numItems
 		str := fmt.Sprintf("SampleValue%d", valIndex)
 		query := gocb.NewSearchQuery(ftsIndexName, cbft.NewMatchQuery(fmt.Sprintf(str)))
 		res, err := bucket.ExecuteSearchQuery(query)
@@ -247,9 +252,9 @@ func FtsWorkload(bucket *gocb.Bucket, ftsIndexName string, numItems int, chErr c
 			}
 
 			if len(res.Hits()) != 1 {
-				msg += fmt.Sprintf("%s:Hits expected 1 but was %d",str, res.Hits())
+				msg += fmt.Sprintf("%s:Hits expected 1 but was %d", str, res.Hits())
 			}
-			chErr <- errors.New("Error from FTS:"+msg)
+			chErr <- errors.New("Error from FTS:" + msg)
 			return
 		}
 	}
@@ -259,7 +264,7 @@ func FtsWorkload(bucket *gocb.Bucket, ftsIndexName string, numItems int, chErr c
 func KvGetWorkload(bucket *gocb.Bucket, numItems int, chErr chan error) {
 	valIndex := 0
 	for !StopWorkload {
-		valIndex = (valIndex+1) % numItems
+		valIndex = (valIndex + 1) % numItems
 		if err := Get(bucket, valIndex); err != nil {
 			chErr <- err
 			return
@@ -271,7 +276,7 @@ func KvGetWorkload(bucket *gocb.Bucket, numItems int, chErr chan error) {
 func KvUpsertWorkload(bucket *gocb.Bucket, numItems int, chErr chan error) {
 	valIndex := 0
 	for !StopWorkload {
-		valIndex = (valIndex+1) % numItems
+		valIndex = (valIndex + 1) % numItems
 		if err := Upsert(bucket, valIndex); err != nil {
 			chErr <- err
 			return
@@ -280,7 +285,7 @@ func KvUpsertWorkload(bucket *gocb.Bucket, numItems int, chErr chan error) {
 	chErr <- nil
 }
 
-func RestRetryer(retry int, params *RestCall, fn func(*RestCall) (string, error) ) (string, error) {
+func RestRetryer(retry int, params *RestCall, fn func(*RestCall) (string, error)) (string, error) {
 
 	var body string
 	var err error
@@ -299,11 +304,11 @@ func RestRetryer(retry int, params *RestCall, fn func(*RestCall) (string, error)
 	return body, nil
 }
 
-func Tuple(version string) (int, int, int){
+func Tuple(version string) (int, int, int) {
 	v, err := MatchingStrings("\\s*([0-9]+).([0-9]+).([0-9,^-]+)\\s*", version)
 
 	if err != nil {
-		return 0,0,0
+		return 0, 0, 0
 	}
 	v1, _ := strconv.Atoi(v[1])
 	v2, _ := strconv.Atoi(v[2])
@@ -324,14 +329,16 @@ func GetResponse(params *RestCall) (string, error) {
 	url := fmt.Sprintf("http://%s:%d%s", login.Hostname, login.Port, path)
 
 	req, err := http.NewRequest(method, url, strings.NewReader(postBody))
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(login.Username+":"+login.Password)))
 	contentType := "application/x-www-form-urlencoded"
 	if params.ContentType != "" {
 		contentType = params.ContentType
 	}
 	req.Header.Set("Content-Type", contentType)
-	for k,v := range header {
+	for k, v := range header {
 		req.Header.Set(k, v)
 	}
 
@@ -348,7 +355,9 @@ func GetResponse(params *RestCall) (string, error) {
 	case s == expected:
 		glog.Infof("%s returned %d", url, s)
 		respBody, err := ioutil.ReadAll(res.Body)
-		if err != nil { return "", err }
+		if err != nil {
+			return "", err
+		}
 		return string(respBody), nil
 	case s == retryOnCode: // expected response when server is not ready for this request yet
 		glog.Infof("%s returned %d which is expected when server is not ready yet", url, s)
@@ -357,7 +366,7 @@ func GetResponse(params *RestCall) (string, error) {
 	default:
 		respBody, err := ioutil.ReadAll(res.Body)
 		glog.Infof("respBody=%s, err=%s", string(respBody), err)
-		return "", stop {fmt.Errorf("Request:%v,PostBody:%s,Response:%d:%s", req, postBody, s, string(respBody))}
+		return "", stop{fmt.Errorf("Request:%v,PostBody:%s,Response:%d:%s", req, postBody, s, string(respBody))}
 	}
 }
 
@@ -384,4 +393,3 @@ func MatchingStrings(pattern string, str string) ([]string, error) {
 	return re.FindStringSubmatch(str), nil
 
 }
-

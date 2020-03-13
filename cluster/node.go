@@ -1,65 +1,61 @@
 package cluster
 
 import (
-	"golang.org/x/crypto/ssh"
-	"fmt"
-	"github.com/golang/glog"
 	"bytes"
-	"errors"
-	"strings"
-	"os"
-	"io"
-	"path"
 	"encoding/json"
-	"time"
-	"sync"
-	"net/url"
-	"strconv"
-	"github.com/hnakamur/go-scp"
+	"errors"
+	"fmt"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/golang/glog"
+	"github.com/hnakamur/go-scp"
+	"golang.org/x/crypto/ssh"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
-
-
 const (
-	Active         = 			"active"
-	InactiveAdded  =	"inactive_added"
-	InactiveFailed =	"inactive_failed"
-	Unknown        =			"unknown"
+	Active         = "active"
+	InactiveAdded  = "inactive_added"
+	InactiveFailed = "inactive_failed"
+	Unknown        = "unknown"
 )
 
 type RespNode struct {
-	ClusterMembership 	string `json:"clusterMembership"`
-	HostName			string `json:"hostname"`
-	Status				string `json:"status""`
-	NSOtpNode			string `json:"otpNode"`
+	ClusterMembership string `json:"clusterMembership"`
+	HostName          string `json:"hostname"`
+	Status            string `json:"status""`
+	NSOtpNode         string `json:"otpNode"`
 }
 
 type RespPoolsNodes struct {
-	RespNodes  []RespNode `json:"nodes"`
+	RespNodes []RespNode `json:"nodes"`
 }
 
 type Node struct {
 	poolsNodes *RespPoolsNodes
-	session *ssh.Session
-	SshLogin *helper.Cred
-	RestLogin *helper.Cred
-	N1qlLogin *helper.Cred
-	FtsLogin *helper.Cred
-	HostName string
-	Port string
-	Version string
-	Services string
-	OtpNode string
+	session    *ssh.Session
+	SshLogin   *helper.Cred
+	RestLogin  *helper.Cred
+	N1qlLogin  *helper.Cred
+	FtsLogin   *helper.Cred
+	HostName   string
+	Port       string
+	Version    string
+	Services   string
+	OtpNode    string
 }
 
 type OsInfo struct {
-	Arch string
-	Platform string
+	Arch        string
+	Platform    string
 	PackageType string
 }
-
-
 
 func (n *Node) getId() string {
 	return fmt.Sprintf("%s:%s", n.HostName, n.Port)
@@ -75,9 +71,13 @@ func (n *Node) Rebalance(remaining, failedOver, toRemove []Node) error {
 
 	var remainingId []string
 	if len(remaining) == 0 {
-		if err := n.Update(true); err != nil { return err }
+		if err := n.Update(true); err != nil {
+			return err
+		}
 		for _, n := range n.poolsNodes.RespNodes {
-			if _, ok := ejectedIds[n.NSOtpNode]; ok { continue }
+			if _, ok := ejectedIds[n.NSOtpNode]; ok {
+				continue
+			}
 			remainingId = append(remainingId, n.NSOtpNode)
 		}
 	}
@@ -90,13 +90,13 @@ func (n *Node) Rebalance(remaining, failedOver, toRemove []Node) error {
 		url.QueryEscape(strings.Join(remainingId, ",")),
 		url.QueryEscape(strings.Join(ejectedId, ",")))
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PRebalance,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PRebalance,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
@@ -109,14 +109,14 @@ func (n *Node) AddNode(newNode *Node, services string) error {
 		n.RestLogin.Username, n.RestLogin.Password, newNode.HostName, url.QueryEscape(newNode.Services))
 	glog.Infof("body:%s", body)
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		RetryOnCode: 400,
-		Method: "POST",
-		Path: helper.PAddNode,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		RetryOnCode:  400,
+		Method:       "POST",
+		Path:         helper.PAddNode,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	if err != nil {
@@ -132,40 +132,43 @@ func (n *Node) AddNode(newNode *Node, services string) error {
 
 func (n *Node) InitNewCluster(config Config) error {
 	err := n.SetMemoryQuota(config.MemoryQuota)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if config.StorageMode != "" {
 		glog.Infof("Set storage mode to %s", config.StorageMode)
-		if err = n.SetStorageMode(config.StorageMode); err != nil { return err }
+		if err = n.SetStorageMode(config.StorageMode); err != nil {
+			return err
+		}
 	}
 	return n.Provision()
 }
 
 func (n *Node) Provision() error {
-	body := fmt.Sprintf("port=SAME&username=%s&password=%s", n.RestLogin.Username,n.RestLogin.Password)
+	body := fmt.Sprintf("port=SAME&username=%s&password=%s", n.RestLogin.Username, n.RestLogin.Password)
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PSettingsWeb,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PSettingsWeb,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	return err
 }
 
-
 func (n *Node) SetMemoryQuota(quota string) error {
 	body := fmt.Sprintf("memoryQuota=%s", quota)
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PPoolsDefault,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PPoolsDefault,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	return err
@@ -174,7 +177,9 @@ func (n *Node) SetMemoryQuota(quota string) error {
 func (n *Node) GetMemUsedStats(bucket string) (*helper.MemUsedStats, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	err := n.RunSsh(&stdoutBuf, &stderrBuf, "/opt/couchbase/bin/cbstats  localhost -u "+n.RestLogin.Username+" -p "+n.RestLogin.Password+" all -b "+bucket)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	lines := strings.Split(stdoutBuf.String(), "\n")
 
@@ -206,7 +211,7 @@ func (n *Node) GetMemUsedStats(bucket string) (*helper.MemUsedStats, error) {
 	}
 
 	return &helper.MemUsedStats{
-		Used: actual,
+		Used:         actual,
 		Uncompressed: uncompressed,
 	}, nil
 }
@@ -214,13 +219,13 @@ func (n *Node) GetMemUsedStats(bucket string) (*helper.MemUsedStats, error) {
 func (n *Node) Rename(hostname string) error {
 	body := fmt.Sprintf("hostname=%s", hostname)
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PRename,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PRename,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	if err == nil {
@@ -236,13 +241,13 @@ func (n *Node) Rename(hostname string) error {
 func (n *Node) SetupMemoryQuota(memoryQuota int) error {
 	body := fmt.Sprintf("memoryQuota=%d", memoryQuota)
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PPoolsDefault,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PPoolsDefault,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	if err == nil {
@@ -258,14 +263,14 @@ func (n *Node) SetupInitialService() error {
 	glog.Infof("SetupInitialService for %s", n.HostName)
 	body := fmt.Sprintf("services=%s", url.QueryEscape(n.Services))
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		RetryOnCode : 400,
-		Method: "POST",
-		Path: helper.PSetupServices,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		RetryOnCode:  400,
+		Method:       "POST",
+		Path:         helper.PSetupServices,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(20, restParam, helper.GetResponse)
 	if err == nil {
@@ -282,11 +287,11 @@ func (n *Node) CreateFtsIndex(name, bucketType, bucket string) error {
 	query := fmt.Sprintf("?sourceType=%s&indexType=fulltext-index&sourceName=%s",
 		bucketType, bucket)
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "PUT",
-		Path: helper.PFts +"/"+name+query,
-		Cred: n.FtsLogin,
+		Method:       "PUT",
+		Path:         helper.PFts + "/" + name + query,
+		Cred:         n.FtsLogin,
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	if err != nil && strings.Contains(err.Error(), "index with the same name already exists") {
@@ -322,13 +327,13 @@ func (n *Node) CreateN1qlIndex(name, fields, bucket string) error {
 	query := fmt.Sprintf("create index %s on `%s` (%s)", name, bucket, fields)
 	body := fmt.Sprintf("statement=%s", url.QueryEscape(query))
 
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PN1ql,
-		Cred: n.N1qlLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PN1ql,
+		Cred:         n.N1qlLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	return err
@@ -337,13 +342,13 @@ func (n *Node) CreateN1qlIndex(name, fields, bucket string) error {
 
 func (n *Node) ChangeBucketCompression(bucket, mode string) error {
 	body := fmt.Sprintf("name=%s&compressionMode=%s", bucket, mode)
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PBuckets +"/"+bucket,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PBuckets + "/" + bucket,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
@@ -358,13 +363,13 @@ func (n *Node) CreateBucket(conf *Bucket) error {
 	if conf.Type == helper.BucketEphemeral {
 		body = fmt.Sprintf("%s&evictionPolicy=%s", body, conf.EphEvictionPolicy)
 	}
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 202,
-		Method: "POST",
-		Path: helper.PBuckets,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PBuckets,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
@@ -382,13 +387,13 @@ func (n *Node) WaitForBucketReady() error {
 			chRes <- n.poolsNodes.RespNodes
 		}()
 		select {
-		case res := <- chRes:
+		case res := <-chRes:
 			isClusterHealthy := true
 			for _, status := range res {
 				if status.Status != "healthy" {
 					isClusterHealthy = false
 					glog.Info("Waiting for bucket ready")
-					time.Sleep(1*time.Second)
+					time.Sleep(1 * time.Second)
 					break
 				}
 			}
@@ -396,7 +401,7 @@ func (n *Node) WaitForBucketReady() error {
 				glog.Info("Bucket is ready")
 				return nil
 			}
-		case <- time.After(helper.WaitTimeout):
+		case <-time.After(helper.WaitTimeout):
 			return errors.New("Timeout while waiting for bucket ready")
 		}
 	}
@@ -404,13 +409,13 @@ func (n *Node) WaitForBucketReady() error {
 
 func (n *Node) SetStorageMode(storageMode string) error {
 	body := fmt.Sprintf("storageMode=%s", storageMode)
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PSettingsIndexes,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "POST",
+		Path:         helper.PSettingsIndexes,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
@@ -419,14 +424,14 @@ func (n *Node) SetStorageMode(storageMode string) error {
 }
 
 func (n *Node) CreateUser(user *helper.UserOption) error {
-	body := fmt.Sprintf("name=%s&password=%s&roles=%s", user.Name, user.Password, strings.Join(*user.Roles,","))
-	restParam := &helper.RestCall {
+	body := fmt.Sprintf("name=%s&password=%s&roles=%s", user.Name, user.Password, strings.Join(*user.Roles, ","))
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "PUT",
-		Path: helper.PRbacUsers +"/"+user.Name,
-		Cred: n.RestLogin,
-		Body: body,
-		Header: map[string]string{"Content-Type":"application/x-www-form-urlencoded"},
+		Method:       "PUT",
+		Path:         helper.PRbacUsers + "/" + user.Name,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
@@ -434,13 +439,12 @@ func (n *Node) CreateUser(user *helper.UserOption) error {
 	return err
 }
 
-
 func (n *Node) DeleteBucket(name string) error {
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "DELETE",
-		Path: helper.PBuckets +"/"+name,
-		Cred: n.RestLogin,
+		Method:       "DELETE",
+		Path:         helper.PBuckets + "/" + name,
+		Cred:         n.RestLogin,
 	}
 
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
@@ -452,11 +456,11 @@ func (n *Node) DeleteBucket(name string) error {
 func (n *Node) PollJoinReady(chErr chan error) {
 	var err error
 	parsed := make(map[string]interface{})
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "GET",
-		Path: helper.PNodesSelf,
-		Cred: n.RestLogin,
+		Method:       "GET",
+		Path:         helper.PNodesSelf,
+		Cred:         n.RestLogin,
 	}
 	info := make(chan map[string]interface{})
 	var resp string
@@ -492,11 +496,11 @@ func (n *Node) PollJoinReady(chErr chan error) {
 
 func (n *Node) PollCompressionMode(bucket, mode string) error {
 	var err error
-	params := &helper.RestCall {
+	params := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "GET",
-		Path: helper.PBuckets +"/"+bucket,
-		Cred: n.RestLogin,
+		Method:       "GET",
+		Path:         helper.PBuckets + "/" + bucket,
+		Cred:         n.RestLogin,
 	}
 
 	info := make(chan map[string]interface{})
@@ -539,11 +543,11 @@ CompressionLoop:
 
 func (n *Node) PollRebalance() error {
 	var err error
-	params := &helper.RestCall {
+	params := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "GET",
-		Path: helper.PRebalanceProgress,
-		Cred: n.RestLogin,
+		Method:       "GET",
+		Path:         helper.PRebalanceProgress,
+		Cred:         n.RestLogin,
 	}
 
 	info := make(chan map[string]interface{})
@@ -593,7 +597,9 @@ func parseRebalanceProgress(status map[string]interface{}) int {
 	cnt := 0
 	progress := 0.0
 	for k, v := range status {
-		if k == "status" { continue }
+		if k == "status" {
+			continue
+		}
 		element := v.(map[string]interface{})
 		glog.Infof("element=%v", element)
 		progress += element["progress"].(float64)
@@ -605,37 +611,44 @@ func parseRebalanceProgress(status map[string]interface{}) int {
 
 func (n *Node) restCallToAux(fn func(RespNode, *helper.Cred, chan error), restLogin *helper.Cred) error {
 	if n.poolsNodes == nil {
-		if err := n.Update(false); err != nil { return err }
+		if err := n.Update(false); err != nil {
+			return err
+		}
 	}
 	nodeId := n.getId()
 	wait := 0
 	var auxNodes []RespNode
 	for _, nn := range n.poolsNodes.RespNodes {
-		if nodeId == nn.HostName { continue }
+		if nodeId == nn.HostName {
+			continue
+		}
 		auxNodes = append(auxNodes, nn)
 	}
 
 	size := len(auxNodes)
-	if size == 0 { return nil }
+	if size == 0 {
+		return nil
+	}
 
 	chErr := make(chan error, size)
 
 	for _, nn := range auxNodes {
 		go fn(nn, restLogin, chErr)
-		wait++; // waitgroup is not useful because, we want to return when any of goroutine fails
+		wait++ // waitgroup is not useful because, we want to return when any of goroutine fails
 	}
 
 	for {
 		select {
 		case res := <-chErr:
 			wait--
-			if res != nil || wait == 0 { return res}
+			if res != nil || wait == 0 {
+				return res
+			}
 		case <-time.After(helper.RestTimeout):
 			return errors.New("Timeout while restCallToAux")
 		}
 	}
 }
-
 
 func (n *Node) FailOverAndEjectAll(restLogin *helper.Cred) error {
 	return n.restCallToAux(failOverAndEject, restLogin)
@@ -662,8 +675,8 @@ func failOverAndEject(node RespNode, login *helper.Cred, chErr chan error) {
 
 }
 
-func  otpPost(otpNode, path string, login *helper.Cred) error {
-	body := "otpNode="+otpNode
+func otpPost(otpNode, path string, login *helper.Cred) error {
+	body := "otpNode=" + otpNode
 	glog.Infof("%s, postbody:%s", login.Hostname+"/"+path, body)
 
 	restParam := &helper.RestCall{
@@ -677,7 +690,7 @@ func  otpPost(otpNode, path string, login *helper.Cred) error {
 	return err
 }
 
-func (n *Node) Membership() (string, error){
+func (n *Node) Membership() (string, error) {
 	thisHost := fmt.Sprintf("%s:%s", n.HostName, n.Port)
 	for _, n := range n.poolsNodes.RespNodes {
 		if n.HostName == thisHost {
@@ -685,29 +698,30 @@ func (n *Node) Membership() (string, error){
 		}
 	}
 
-	return "", errors.New("Could not find node info of "+thisHost)
+	return "", errors.New("Could not find node info of " + thisHost)
 
 }
 
 func (n *Node) GetBuckets() (*[]Bucket, error) {
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "GET",
-		Path: helper.PBuckets,
-		Cred: n.RestLogin,
+		Method:       "GET",
+		Path:         helper.PBuckets,
+		Cred:         n.RestLogin,
 	}
 	resp, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	var buckets []Bucket
 	err = json.Unmarshal([]byte(resp), &buckets)
 
 	return &buckets, err
 
-
 }
 
-func (n *Node) Update (force bool) error {
+func (n *Node) Update(force bool) error {
 	if n.poolsNodes != nil && !force {
 		return nil
 	}
@@ -738,25 +752,24 @@ func (n *Node) Update (force bool) error {
 }
 
 func (n *Node) StopRebalance() (string, error) {
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "POST",
-		Path: helper.PRebalanceStop,
-		Cred: n.RestLogin,
+		Method:       "POST",
+		Path:         helper.PRebalanceStop,
+		Cred:         n.RestLogin,
 	}
 	return helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 }
 
 func (n *Node) GetInfo() (string, error) {
-	restParam := &helper.RestCall {
+	restParam := &helper.RestCall{
 		ExpectedCode: 200,
-		Method: "GET",
-		Path: helper.PPools,
-		Cred: n.RestLogin,
+		Method:       "GET",
+		Path:         helper.PPools,
+		Cred:         n.RestLogin,
 	}
 	return helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 }
-
 
 func (n *Node) StartServer(wg *sync.WaitGroup) {
 	glog.Infof("In StartServer, my host is :%p:%s", n, n.HostName)
@@ -782,7 +795,9 @@ func (n *Node) StartServer(wg *sync.WaitGroup) {
 func (n *Node) GetSystemInfo() OsInfo {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	err := n.RunSsh(&stdoutBuf, &stderrBuf, "cat /etc/os-release")
-	if err != nil { glog.Fatalf("Os Info:%s", err) }
+	if err != nil {
+		glog.Fatalf("Os Info:%s", err)
+	}
 	lines := strings.Split(stdoutBuf.String(), "\n")
 
 	var id, version string
@@ -793,7 +808,9 @@ func (n *Node) GetSystemInfo() OsInfo {
 		if len(version) == 0 {
 			version, _ = helper.MatchingString("VERSION_ID=\"([0-9]+)\"", line)
 		}
-		if (len(id) > 0 && len(version) > 0) { break }
+		if len(id) > 0 && len(version) > 0 {
+			break
+		}
 	}
 
 	if len(id) == 0 || len(version) == 0 {
@@ -802,29 +819,32 @@ func (n *Node) GetSystemInfo() OsInfo {
 
 	stdoutBuf.Reset()
 	err = n.RunSsh(&stdoutBuf, &stderrBuf, "lscpu")
-	if err != nil { glog.Fatalf("System Info:%s", err) }
+	if err != nil {
+		glog.Fatalf("System Info:%s", err)
+	}
 	lines = strings.Split(stdoutBuf.String(), "\n")
 
 	var arch string
 	for _, line := range lines {
 		arch, _ = helper.MatchingString("Architecture:\\s*([^\\s]+)\\s*", line)
-		if len(arch) > 0 { break }
+		if len(arch) > 0 {
+			break
+		}
 	}
 
 	packageType := "rpm"
-	platform := id+version
+	platform := id + version
 	if id != "centos" {
 		packageType = "deb"
 		arch = "amd64"
 	}
 
-	return OsInfo {
-		Arch: arch,
-		Platform: platform,
+	return OsInfo{
+		Arch:        arch,
+		Platform:    platform,
 		PackageType: packageType,
 	}
 }
-
 
 func (n *Node) RunSsh(stdoutBuf *bytes.Buffer, stderrBuf *bytes.Buffer, cmd string) error {
 	n.session = newSession(n.SshLogin)
@@ -847,20 +867,26 @@ func (n *Node) ScpToRemote(src, dest string) error {
 	var stderrBuf bytes.Buffer
 
 	f, err := os.Open(src)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 
 	s, err := f.Stat()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	n.session = newSession(n.SshLogin)
 	defer n.session.Close()
 
 	n.session.Stderr = &stderrBuf
 	w, err := n.session.StdinPipe()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
-	if err := n.session.Start("scp -t "+dest); err != nil {
+	if err := n.session.Start("scp -t " + dest); err != nil {
 		w.Close()
 		return err
 	}
@@ -885,7 +911,9 @@ func (n *Node) ScpToRemote(src, dest string) error {
 func (n *Node) ScpToLocal(src, dest string) error {
 
 	sshClient, err := newClient(n.SshLogin)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	scpHandle := scp.NewSCP(sshClient)
 
 	return scpHandle.ReceiveFile(src, dest)
@@ -903,9 +931,9 @@ func (n *Node) ScpToLocalDir(src, dest string) error {
 }
 
 func newClient(sshLogin *helper.Cred) (*ssh.Client, error) {
-	sshConfig := &ssh.ClientConfig {
+	sshConfig := &ssh.ClientConfig{
 		User: sshLogin.Username,
-		Auth: []ssh.AuthMethod {
+		Auth: []ssh.AuthMethod{
 			ssh.Password(sshLogin.Password),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
@@ -916,7 +944,7 @@ func newClient(sshLogin *helper.Cred) (*ssh.Client, error) {
 }
 
 func newSession(sshLogin *helper.Cred) *ssh.Session {
-	connection, err :=  newClient(sshLogin)
+	connection, err := newClient(sshLogin)
 
 	if err != nil {
 		glog.Fatalf("Failed to dial:%s", err)
@@ -929,4 +957,3 @@ func newSession(sshLogin *helper.Cred) *ssh.Session {
 
 	return session
 }
-

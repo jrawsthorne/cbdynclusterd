@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/couchbaselabs/cbdynclusterd/helper"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/network"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
 )
 
 func newRandomClusterID() string {
@@ -35,11 +35,11 @@ type Node struct {
 }
 
 type Cluster struct {
-	ID      string
-	Creator string
-	Owner   string
-	Timeout time.Time
-	Nodes   []*Node
+	ID         string
+	Creator    string
+	Owner      string
+	Timeout    time.Time
+	Nodes      []*Node
 	EntryPoint string
 }
 

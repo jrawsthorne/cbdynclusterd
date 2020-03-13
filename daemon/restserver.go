@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"strings"
 	"time"
-	"github.com/gorilla/mux"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"fmt"
 )
 
 var Version string
@@ -28,7 +28,7 @@ func jsonifyError(err error) ErrorJSON {
 }
 
 type RefreshJSON struct {
-	Timeout         string `json:"timeout"`
+	Timeout string `json:"timeout"`
 }
 
 type NodeJSON struct {
@@ -67,7 +67,7 @@ func UnjsonifyNode(jsonNode *NodeJSON) *Node {
 
 type DockerHostJSON struct {
 	Hostname string `json:"hostname"`
-	Port string     `json:"port"`
+	Port     string `json:"port"`
 }
 
 type VersionJSON struct {
@@ -75,20 +75,20 @@ type VersionJSON struct {
 }
 
 type ClusterJSON struct {
-	ID      string     `json:"id"`
-	Creator string     `json:"creator"`
-	Owner   string     `json:"owner"`
-	Timeout string     `json:"timeout"`
-	Nodes   []NodeJSON `json:"nodes"`
-	EntryPoint string  `json:"entry"`
+	ID         string     `json:"id"`
+	Creator    string     `json:"creator"`
+	Owner      string     `json:"owner"`
+	Timeout    string     `json:"timeout"`
+	Nodes      []NodeJSON `json:"nodes"`
+	EntryPoint string     `json:"entry"`
 }
 
 func jsonifyCluster(cluster *Cluster) ClusterJSON {
 	jsonCluster := ClusterJSON{
-		ID:      cluster.ID,
-		Creator: cluster.Creator,
-		Owner:   cluster.Owner,
-		Timeout: cluster.Timeout.Format(time.RFC3339),
+		ID:         cluster.ID,
+		Creator:    cluster.Creator,
+		Owner:      cluster.Owner,
+		Timeout:    cluster.Timeout.Format(time.RFC3339),
 		EntryPoint: cluster.EntryPoint,
 	}
 
@@ -223,13 +223,13 @@ type CreateClusterNodeJSON struct {
 }
 
 type CreateClusterSetupJSON struct {
-	Services       []string `json:"services"`
-	StorageMode    string   `json:"storage_mode"`
-	RamQuota       int      `json:"ram_quota"`
-	UseHostname    bool     `json:"use_hostname"`
-	UseIpv6        bool     `json:"use_ipv6"`
-	Bucket         *helper.BucketOption   `json:"bucket"`
-	User           *helper.UserOption     `json:"user"`
+	Services    []string             `json:"services"`
+	StorageMode string               `json:"storage_mode"`
+	RamQuota    int                  `json:"ram_quota"`
+	UseHostname bool                 `json:"use_hostname"`
+	UseIpv6     bool                 `json:"use_ipv6"`
+	Bucket      *helper.BucketOption `json:"bucket"`
+	User        *helper.UserOption   `json:"user"`
 }
 
 type CreateClusterJSON struct {
@@ -325,16 +325,16 @@ type UpdateClusterJSON struct {
 }
 
 func HttpGetDockerHost(w http.ResponseWriter, r *http.Request) {
-	jsonResp := &DockerHostJSON {
+	jsonResp := &DockerHostJSON{
 		Hostname: dockerHostFlag,
-		Port: dockerPortFlag,
+		Port:     dockerPortFlag,
 	}
 	writeJsonResponse(w, jsonResp)
 	return
 }
 
 func HttpGetVersion(w http.ResponseWriter, r *http.Request) {
-	jsonResp := &VersionJSON {
+	jsonResp := &VersionJSON{
 		Version: Version,
 	}
 	writeJsonResponse(w, jsonResp)
@@ -369,7 +369,7 @@ func HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 
 	epnode, err := SetupCluster(&ClusterSetupOptions{
 		Nodes: cluster.Nodes,
-		Conf: reqData,
+		Conf:  reqData,
 	})
 	if err != nil {
 		writeJSONError(w, err)
