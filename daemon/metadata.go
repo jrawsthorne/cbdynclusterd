@@ -62,10 +62,7 @@ func (store *MetaDataStore) deserializeMeta(bytes []byte) (ClusterMeta, error) {
 }
 
 func (store *MetaDataStore) Open(dir string) error {
-	opts := badger.DefaultOptions
-	opts.Dir = dir
-	opts.ValueDir = dir
-
+	opts := badger.DefaultOptions(dir)
 	db, err := badger.Open(opts)
 	if err != nil {
 		return err
@@ -113,7 +110,7 @@ func (store *MetaDataStore) UpdateClusterMeta(clusterID string, updateFunc Updat
 			return err
 		}
 
-		metaBytes, err := item.Value()
+		metaBytes, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}
@@ -153,13 +150,13 @@ func (store *MetaDataStore) GetClusterMeta(clusterID string) (ClusterMeta, error
 			return
 		}
 	}()
-	err := store.db.Update(func(txn *badger.Txn) error {
+	err := store.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(clusterKey)
 		if err != nil {
 			return err
 		}
 
-		metaBytes, err := item.Value()
+		metaBytes, err := item.ValueCopy(nil)
 		if err != nil {
 			return err
 		}

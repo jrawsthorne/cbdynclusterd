@@ -8,17 +8,18 @@ import (
 	"os/signal"
 	"time"
 
+	goflag "flag"
+	"fmt"
+	"io/ioutil"
+	"path"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/mitchellh/go-homedir"
-	"fmt"
-	"path"
 	"github.com/pelletier/go-toml"
-	"io/ioutil"
-	goflag "flag"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 var docker *client.Client
@@ -29,11 +30,10 @@ var cfgFile string
 var cfgFileName = ".cbdynclusterd.toml"
 var dockerRegistryFlag, dockerHostFlag, dockerPortFlag, dnsHostFlag string
 
-
 var rootCmd = &cobra.Command{
 	Use:   "cbdynclusterd",
 	Short: "Launches cbdyncluster daemon",
-	Long: "Launches cbdyncluster daemon",
+	Long:  "Launches cbdyncluster daemon",
 	Run: func(cmd *cobra.Command, args []string) {
 		Start()
 	},
@@ -59,7 +59,6 @@ func init() {
 }
 
 func initConfig() {
-
 
 	if cfgFile != "" {
 		// if user specified the config file, use it
@@ -89,15 +88,17 @@ func initConfig() {
 	viper.ReadInConfig()
 
 	dockerRegistryFlag = getArg("docker-registry")
-	dockerHostFlag     = getArg("docker-host")
-	dockerPortFlag     = getArg("docker-port")
-	dnsHostFlag        = getArg("dns-host")
+	dockerHostFlag = getArg("docker-host")
+	dockerPortFlag = getArg("docker-port")
+	dnsHostFlag = getArg("dns-host")
 
 }
 
 func createConfigFile(configFile string) error {
 	tmap, err := toml.TreeFromMap(nil)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	tmap.Set("docker-registry", dockerRegistryFlag)
 	tmap.Set("docker-host", dockerHostFlag)
@@ -133,12 +134,11 @@ func openMeta() error {
 }
 
 func connectDocker() error {
-	var clientOpts []func(*client.Client) error
-	clientOpts = append(clientOpts, client.FromEnv)
-	clientOpts = append(clientOpts, client.WithHost("tcp://"+dockerHostFlag+":"+dockerPortFlag))
-	clientOpts = append(clientOpts, client.WithVersion("1.38"))
-
-	cli, err := client.NewClientWithOpts(clientOpts...)
+	cli, err := client.NewClient(
+		"tcp://"+dockerHostFlag+":"+dockerPortFlag,
+		"1.38",
+		nil,
+		nil)
 	if err != nil {
 		return err
 	}
