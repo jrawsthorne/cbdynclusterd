@@ -205,20 +205,19 @@ func allocateCluster(ctx context.Context, opts ClusterOptions) (string, error) {
 				// check the build exists and then build the image
 				err = checkBuildExists(fmt.Sprintf("%s/%s", node.VersionInfo.toURL(), node.VersionInfo.toPkgName()))
 				if err != nil {
-					log.Printf("Failed building the node image: %s", err)
 					return "", err
-				} else {
-					log.Printf("Building %s image for cluster %s (requested by: %s)", containerImage, clusterID, ContextUser(ctx))
-					err = imageBuild(ctx, node.VersionInfo, helper.DockerFilePath+"couchbase/centos7") // TODO: might want this to be a config too
-					if err != nil {
-						return "", err
-					}
+				}
 
-					log.Printf("Pushing %s image for cluster %s (requested by: %s)", containerImage, clusterID, ContextUser(ctx))
-					err = imagePush(ctx, node.VersionInfo)
-					if err != nil {
-						return "", err
-					}
+				log.Printf("Building %s image for cluster %s (requested by: %s)", containerImage, clusterID, ContextUser(ctx))
+				err = imageBuild(ctx, node.VersionInfo, helper.DockerFilePath+"couchbase/centos7") // TODO: might want this to be a config too
+				if err != nil {
+					return "", err
+				}
+
+				log.Printf("Pushing %s image for cluster %s (requested by: %s)", containerImage, clusterID, ContextUser(ctx))
+				err = imagePush(ctx, node.VersionInfo)
+				if err != nil {
+					return "", err
 				}
 			}
 		}
