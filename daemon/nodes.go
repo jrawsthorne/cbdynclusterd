@@ -57,28 +57,33 @@ func (nv *NodeVersion) toURL() string {
 	return fmt.Sprintf("%s%s/%s", cluster.BuildUrl, nv.Flavor, nv.Build)
 }
 
-var versionToFlavor = map[string]map[string]string{
-	"4": {"0": "sherlock", "5": "watson"},
-	"5": {"0": "spock", "5": "vulcan"},
-	"6": {"0": "alice", "5": "mad-hatter"},
+var versionToFlavor = map[int]map[int]string{
+	4: {0: "sherlock", 5: "watson"},
+	5: {0: "spock", 5: "vulcan"},
+	6: {0: "alice", 5: "mad-hatter"},
+	7: {0: "cheshire-cat"},
 }
 
 func flavorFromVersion(version string) (string, error) {
 	versionSplit := strings.Split(version, ".")
-	major := versionSplit[0]
+
+	major, err := strconv.Atoi(versionSplit[0])
+	if err != nil {
+		return "", errors.New("Could not convert version major to int")
+	}
+
 	minor, err := strconv.Atoi(versionSplit[1])
 	if err != nil {
 		return "", errors.New("Could not convert version minor to int")
 	}
 
-	var minorS string
-	if 5-minor <= 0 {
-		minorS = "5"
+	if minor >= 5 {
+		minor = 5
 	} else {
-		minorS = "0"
+		minor = 0
 	}
 
-	flavor, ok := versionToFlavor[major][minorS]
+	flavor, ok := versionToFlavor[major][minor]
 	if !ok {
 		return "", fmt.Errorf("%d.%d is not a recognised flavor", major, minor)
 	}
