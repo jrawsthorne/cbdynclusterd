@@ -147,17 +147,23 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 	ipv4 := containerJSON.NetworkSettings.Networks[NetworkName].IPAddress
 	ipv6 := containerJSON.NetworkSettings.Networks[NetworkName].GlobalIPv6Address
 	containerHostName := containerName + ".couchbase.com"
-	if ipv4 != "" {
-		glog.Infof("register %s => %s on %s\n", ipv4, containerHostName, dnsHostFlag)
-		body, err := registerDomainName(containerHostName, ipv4)
-		if err != nil {
-			glog.Warningf("Failed registering IPv4:%s, %s", err, body)
+
+	if dnsHostFlag != "" {
+		if ipv4 != "" {
+			glog.Infof("register %s => %s on %s\n", ipv4, containerHostName, dnsHostFlag)
+			body, err := registerDomainName(containerHostName, ipv4)
+			if err != nil {
+				glog.Warningf("Failed registering IPv4:%s, %s", err, body)
+			}
+		}
+
+		if ipv6 != "" {
+			glog.Infof("register %s => %s on %s\n", ipv6, containerHostName, dnsHostFlag)
+			body, err := registerDomainName(containerHostName, ipv6)
+			glog.Warningf("Failed registering IPv6:%s, %s", err, body)
 		}
 	}
-	if ipv6 != "" {
-		body, err := registerDomainName(containerHostName, ipv6)
-		glog.Warningf("Failed registering IPv6:%s, %s", err, body)
-	}
+
 	return createResult.ID, nil
 }
 
