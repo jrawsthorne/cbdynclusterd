@@ -114,8 +114,8 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 	containerImage := opts.VersionInfo.toImageName()
 
 	var dns []string
-	if dnsHostFlag != "" {
-		dns = append(dns, dnsHostFlag)
+	if dnsSvcHost != "" {
+		dns = append(dns, dnsSvcHost)
 	}
 	createResult, err := docker.ContainerCreate(context.Background(), &container.Config{
 		Image: containerImage,
@@ -148,9 +148,9 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 	ipv6 := containerJSON.NetworkSettings.Networks[NetworkName].GlobalIPv6Address
 	containerHostName := containerName + ".couchbase.com"
 
-	if dnsHostFlag != "" {
+	if dnsSvcHost != "" {
 		if ipv4 != "" {
-			glog.Infof("register %s => %s on %s\n", ipv4, containerHostName, dnsHostFlag)
+			glog.Infof("register %s => %s on %s\n", ipv4, containerHostName, dnsSvcHost)
 			body, err := registerDomainName(containerHostName, ipv4)
 			if err != nil {
 				glog.Warningf("Failed registering IPv4:%s, %s", err, body)
@@ -158,7 +158,7 @@ func allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts
 		}
 
 		if ipv6 != "" {
-			glog.Infof("register %s => %s on %s\n", ipv6, containerHostName, dnsHostFlag)
+			glog.Infof("register %s => %s on %s\n", ipv6, containerHostName, dnsSvcHost)
 			body, err := registerDomainName(containerHostName, ipv6)
 			glog.Warningf("Failed registering IPv6:%s, %s", err, body)
 		}
@@ -174,7 +174,7 @@ func registerDomainName(hostname, ip string) (string, error) {
 		ContentType:  "application/json",
 		Method:       "PUT",
 		Cred: &helper.Cred{
-			Hostname: dnsHostFlag,
+			Hostname: dnsSvcHost,
 			Port:     80,
 		},
 		Path: helper.Domain + "/" + hostname,
@@ -191,7 +191,7 @@ func killNode(ctx context.Context, containerID string) error {
 		return err
 	}
 
-	// No need to kill the node, since we use `kill on stop` when creating the account
+	// No need to kill the node, since we use `kill on stop` when creating the container
 	/*
 		err = docker.ContainerKill(context.Background(), containerID, "")
 		if err != nil {

@@ -22,23 +22,30 @@ import (
 	"github.com/spf13/viper"
 )
 
+var defaultCfgFileName = ".cbdynclusterd.toml"
+
 var docker *client.Client
 var metaStore *MetaDataStore
 var systemCtx context.Context
-var dockerRegistry = "dockerhub.build.couchbase.com" // TODO: get this from a config
-var cfgFile string
-var cfgFileName = ".cbdynclusterd.toml"
-var dockerRegistryFlag, dockerHostFlag, dockerPortFlag, dnsHostFlag string
+
+var dockerRegistry = "dockerhub.build.couchbase.com"
+var dockerHost = "/var/run/docker.sock"
+var dnsSvcHost = ""
+
+var cfgFileFlag string
+var dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag string
+var dockerPortFlag int32
 
 var rootCmd = &cobra.Command{
 	Use:   "cbdynclusterd",
 	Short: "Launches cbdyncluster daemon",
 	Long:  "Launches cbdyncluster daemon",
 	Run: func(cmd *cobra.Command, args []string) {
-		Start()
+		startDaemon()
 	},
 }
 
+// Execute starts our daemon service.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -51,18 +58,20 @@ func init() {
 
 	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 	goflag.CommandLine.Parse([]string{})
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/"+cfgFileName+")")
-	rootCmd.PersistentFlags().StringVar(&dockerRegistryFlag, "docker-registry", "dockerhub.build.couchbase.com", "docker registry to pull/push images")
-	rootCmd.PersistentFlags().StringVar(&dockerHostFlag, "docker-host", "172.23.104.43", "docker host where containers are running")
-	rootCmd.PersistentFlags().StringVar(&dockerPortFlag, "docker-port", "2376", "docker port where docker daemon is running on")
-	rootCmd.PersistentFlags().StringVar(&dnsHostFlag, "dns-host", "172.23.111.128", "dns server IP")
+	rootCmd.PersistentFlags().StringVar(&cfgFileFlag, "config", "", "config file (default is $HOME/"+defaultCfgFileName+")")
+	rootCmd.PersistentFlags().StringVar(&dockerRegistryFlag, "docker-registry", dockerRegistry, "docker registry to pull/push images")
+	rootCmd.PersistentFlags().StringVar(&dockerHostFlag, "docker-host", dockerHost, "docker host where containers are running (i.e. tcp://127.0.0.1:2376)")
+	rootCmd.PersistentFlags().StringVar(&dnsSvcHostFlag, "dns-host", dnsSvcHost, "Restful DNS server IP")
+
+	rootCmd.PersistentFlags().Int32Var(&dockerPortFlag, "docker-port", 0, "")
+	rootCmd.PersistentFlags().MarkDeprecated("docker-port", "Deprecated flag to specify the port of the docker host")
 }
 
 func initConfig() {
 
-	if cfgFile != "" {
+	if cfgFileFlag != "" {
 		// if user specified the config file, use it
-		viper.SetConfigFile(cfgFile)
+		viper.SetConfigFile(cfgFileFlag)
 	} else {
 		// use default config file
 		home, err := homedir.Dir()
@@ -71,7 +80,7 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		configFile := path.Join(home, cfgFileName)
+		configFile := path.Join(home, defaultCfgFileName)
 		viper.SetConfigFile(configFile)
 
 		// Read configuration file. If not exists, create and set with default values
@@ -87,11 +96,34 @@ func initConfig() {
 	viper.AutomaticEnv()
 	viper.ReadInConfig()
 
-	dockerRegistryFlag = getArg("docker-registry")
-	dockerHostFlag = getArg("docker-host")
-	dockerPortFlag = getArg("docker-port")
-	dnsHostFlag = getArg("dns-host")
+	getStringArg := func(arg string) string {
+		if rootCmd.PersistentFlags().Changed(arg) {
+			val, _ := rootCmd.PersistentFlags().GetString(arg)
+			return val
+		}
+		return viper.GetString(arg)
+	}
 
+	getInt32Arg := func(arg string) int32 {
+		if rootCmd.PersistentFlags().Changed(arg) {
+			val, _ := rootCmd.PersistentFlags().GetInt32(arg)
+			return val
+		}
+		return viper.GetInt32(arg)
+	}
+
+	dockerRegistryFlag = getStringArg("docker-registry")
+	dockerHostFlag = getStringArg("docker-host")
+	dockerPortFlag = getInt32Arg("docker-port")
+	dnsSvcHostFlag = getStringArg("dns-host")
+
+	dockerRegistry = dockerRegistryFlag
+	dockerHost = dockerHostFlag
+	dnsSvcHost = dnsSvcHostFlag
+
+	if dockerPortFlag > 0 {
+		dockerHost = fmt.Sprintf("tcp://%s:%d", dockerHostFlag, dockerPortFlag)
+	}
 }
 
 func createConfigFile(configFile string) error {
@@ -102,23 +134,13 @@ func createConfigFile(configFile string) error {
 
 	tmap.Set("docker-registry", dockerRegistryFlag)
 	tmap.Set("docker-host", dockerHostFlag)
-	tmap.Set("docker-port", dockerPortFlag)
-	tmap.Set("dns-host", dnsHostFlag)
+	tmap.Set("dns-host", dnsSvcHostFlag)
 
-	return ioutil.WriteFile(configFile, []byte(tmap.String()), 0644)
-}
-
-func getArg(arg string) string {
-	var val string
-	if rootCmd.PersistentFlags().Changed(arg) {
-		// read from commandline option
-		val, _ = rootCmd.PersistentFlags().GetString(arg)
-	} else {
-		// read from config
-		val = viper.GetString(arg)
+	if dockerPortFlag > 0 {
+		tmap.Set("docker-port", dockerPortFlag)
 	}
 
-	return val
+	return ioutil.WriteFile(configFile, []byte(tmap.String()), 0644)
 }
 
 func openMeta() error {
@@ -134,11 +156,7 @@ func openMeta() error {
 }
 
 func connectDocker() error {
-	cli, err := client.NewClient(
-		"tcp://"+dockerHostFlag+":"+dockerPortFlag,
-		"1.38",
-		nil,
-		nil)
+	cli, err := client.NewClient(dockerHost, "1.38", nil, nil)
 	if err != nil {
 		return err
 	}
@@ -225,7 +243,7 @@ func getAndPrintClusters(ctx context.Context) {
 	}
 }
 
-func Start() {
+func startDaemon() {
 	// Open the meta-data database used to tracker ownership and expiry of clusters
 	err := openMeta()
 	if err != nil {

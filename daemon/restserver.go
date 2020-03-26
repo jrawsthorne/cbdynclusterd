@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/gorilla/mux"
 )
 
 var Version string
@@ -325,9 +327,20 @@ type UpdateClusterJSON struct {
 }
 
 func HttpGetDockerHost(w http.ResponseWriter, r *http.Request) {
+	hostURI, err := url.Parse(dockerHost)
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	if hostURI.Scheme != "tcp" {
+		writeJSONError(w, errors.New("docker is not configured via tcp and cannot return the docker host"))
+		return
+	}
+
 	jsonResp := &DockerHostJSON{
-		Hostname: dockerHostFlag,
-		Port:     dockerPortFlag,
+		Hostname: hostURI.Hostname(),
+		Port:     hostURI.Port(),
 	}
 	writeJsonResponse(w, jsonResp)
 	return
