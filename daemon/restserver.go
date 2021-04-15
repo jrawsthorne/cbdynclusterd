@@ -258,7 +258,10 @@ func (d *daemon) HttpUpdateCluster(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		d.refreshCluster(reqCtx, clusterID, newTimeout)
+		if err := d.refreshCluster(reqCtx, clusterID, newTimeout); err != nil {
+			writeJSONError(w, err)
+			return
+		}
 
 		w.WriteHeader(200)
 		return
