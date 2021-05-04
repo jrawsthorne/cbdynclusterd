@@ -2,12 +2,13 @@ package docker
 
 import (
 	"errors"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"github.com/go-git/go-git/v5"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os"
+
+	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/go-git/go-git/v5"
+	"gopkg.in/yaml.v2"
 )
 
 type Products map[string]map[string]AliasVersion
