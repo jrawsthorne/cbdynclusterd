@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
@@ -36,6 +37,8 @@ func NewDockerService(d *client.Client, dockerRegistry, dnsSvcHost, aliasRepoPat
 }
 
 func (ds *DockerService) GetCluster(ctx context.Context, clusterID string) (*cluster.Cluster, error) {
+	log.Printf("Running docker GetCluster (requested by: %s)", dyncontext.ContextUser(ctx))
+
 	clusters, err := ds.GetAllClusters(ctx)
 	if err != nil {
 		return nil, err
@@ -51,6 +54,8 @@ func (ds *DockerService) GetCluster(ctx context.Context, clusterID string) (*clu
 }
 
 func (ds *DockerService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster, error) {
+	log.Printf("Running docker GetAllClusters (requested by: %s)", dyncontext.ContextUser(ctx))
+
 	containers, err := ds.docker.ContainerList(ctx, types.ContainerListOptions{
 		All: true,
 	})
@@ -200,7 +205,7 @@ func (ds *DockerService) AllocateCluster(ctx context.Context, opts AllocateClust
 }
 
 func (ds *DockerService) KillCluster(ctx context.Context, clusterID string) error {
-	log.Printf("Killing cluster %s (requested by: %s)", clusterID, dyncontext.ContextUser(ctx))
+	log.Printf("Killing docker cluster %s (requested by: %s)", clusterID, dyncontext.ContextUser(ctx))
 
 	c, err := ds.GetCluster(ctx, clusterID)
 	if err != nil {
@@ -239,7 +244,7 @@ func (ds *DockerService) KillCluster(ctx context.Context, clusterID string) erro
 }
 
 func (ds *DockerService) KillAllClusters(ctx context.Context) error {
-	log.Printf("Killing all clusters")
+	log.Printf("Killing all docker clusters")
 
 	var clustersToKill []string
 
@@ -288,7 +293,7 @@ func (ds *DockerService) EnsureImageExists(ctx context.Context, serverVersion st
 	return nodeVersion.toImageName(ds.dockerRegistry), nil
 }
 
-func (ds *DockerService) SetupCluster(opts *service.ClusterSetupOptions) (string, error) {
+func (ds *DockerService) SetupCluster(opts ClusterSetupOptions) (string, error) {
 	services := opts.Services
 
 	initialNodes := opts.Nodes
@@ -365,8 +370,13 @@ func (ds *DockerService) AddCollection(ctx context.Context, clusterID string, op
 	})
 }
 
-func (ds *DockerService) SetupCertAuth(opts service.SetupClientCertAuthOptions) (*service.CertAuthResult, error) {
-	initialNodes := opts.Nodes
+func (ds *DockerService) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions) (*service.CertAuthResult, error) {
+	c, err := ds.GetCluster(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+
+	initialNodes := c.Nodes
 	var nodes []Node
 	var clusterVersion = initialNodes[0].InitialServerVersion
 	for i := 0; i < len(initialNodes); i++ {
@@ -453,4 +463,31 @@ func (ds *DockerService) AddSampleBucket(ctx context.Context, clusterID string, 
 	}
 
 	return node.LoadSample(opts.SampleBucket)
+}
+
+func (ds *DockerService) AddUser(ctx context.Context, clusterID string, user *helper.UserOption, bucket string) error {
+	return errors.New("not supported")
+}
+
+func (ds *DockerService) AddIP(ctx context.Context, clusterID, ip string) error {
+	return errors.New("not supported")
+}
+
+func (ds *DockerService) ConnString(ctx context.Context, clusterID string, useSSL bool) (string, error) {
+	c, err := ds.GetCluster(ctx, clusterID)
+	if err != nil {
+		return "", err
+	}
+
+	var addresses []string
+	for _, node := range c.Nodes {
+		addresses = append(addresses, node.IPv4Address)
+	}
+
+	scheme := "couchbase"
+	if useSSL {
+		scheme = "couchbases"
+	}
+
+	return fmt.Sprintf("%s://%s", scheme, strings.Join(addresses, ",")), nil
 }

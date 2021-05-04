@@ -2,17 +2,21 @@ package daemon
 
 import (
 	"context"
-	"github.com/couchbaselabs/cbdynclusterd/cluster"
-	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"github.com/couchbaselabs/cbdynclusterd/service/docker"
-	"github.com/couchbaselabs/cbdynclusterd/store"
+	"errors"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"time"
+
+	"github.com/couchbaselabs/cbdynclusterd/cluster"
+	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
+	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/couchbaselabs/cbdynclusterd/service"
+	"github.com/couchbaselabs/cbdynclusterd/service/cloud"
+	"github.com/couchbaselabs/cbdynclusterd/service/docker"
+	"github.com/couchbaselabs/cbdynclusterd/store"
 
 	goflag "flag"
 	"fmt"
@@ -28,17 +32,24 @@ import (
 	"github.com/spf13/viper"
 )
 
-var defaultCfgFileName = ".cbdynclusterd.toml"
+var (
+	defaultCfgFileName = ".cbdynclusterd.toml"
 
-var dockerRegistry = "dockerhub.build.couchbase.com"
-var dockerHost = "/var/run/docker.sock"
-var dnsSvcHost = ""
+	dockerRegistry  = "dockerhub.build.couchbase.com"
+	dockerHost      = "/var/run/docker.sock"
+	dnsSvcHost      = ""
+	aliasRepoPath   = helper.AliasRepoPath
+	cloudAccessKey  = ""
+	cloudPrivateKey = ""
+	cloudURL        = "https://cloudapi.cloud.couchbase.com"
+	cloudID         = ""
+	cloudProjectID  = ""
 
-var aliasRepoPath = helper.AliasRepoPath
-
-var cfgFileFlag string
-var dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag string
-var dockerPortFlag int32
+	cfgFileFlag string
+	dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag, cloudAccessKeyFlag, cloudPrivateKeyFlag,
+	cloudIDFlag, cloudProjectIDFlag string
+	dockerPortFlag int32
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "cbdynclusterd",
@@ -66,14 +77,21 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&dockerRegistryFlag, "docker-registry", dockerRegistry, "docker registry to pull/push images")
 	rootCmd.PersistentFlags().StringVar(&dockerHostFlag, "docker-host", dockerHost, "docker host where containers are running (i.e. tcp://127.0.0.1:2376)")
 	rootCmd.PersistentFlags().StringVar(&dnsSvcHostFlag, "dns-host", dnsSvcHost, "Restful DNS server IP")
-	rootCmd.PersistentFlags().StringVar(&aliasRepoPathFlag, "alias-repo", dnsSvcHost, "Path to the alias repo")
+	rootCmd.PersistentFlags().StringVar(&aliasRepoPathFlag, "alias-repo", aliasRepoPath, "Path to the alias repo")
+	rootCmd.PersistentFlags().StringVar(&cloudAccessKeyFlag, "cloud-access-key", "", "Access key to use for cloud requests")
+	rootCmd.PersistentFlags().StringVar(&cloudPrivateKeyFlag, "cloud-private-key", "", "Private key to use for cloud requests")
+	rootCmd.PersistentFlags().StringVar(&cloudIDFlag, "cloud-id", "", "Cloud ID use for cloud")
+	rootCmd.PersistentFlags().StringVar(&cloudProjectIDFlag, "cloud-project-id", "", "Project ID to use for cloud")
 
 	rootCmd.PersistentFlags().Int32Var(&dockerPortFlag, "docker-port", 0, "")
 	rootCmd.PersistentFlags().MarkDeprecated("docker-port", "Deprecated flag to specify the port of the docker host")
 }
 
 func initConfig() {
-	if cfgFileFlag == "" {
+	if cfgFileFlag != "" {
+		// if user specified the config file, use it
+		viper.SetConfigFile(cfgFileFlag)
+	} else {
 		// use default config file
 		home, err := homedir.Dir()
 		if err != nil {
@@ -91,9 +109,6 @@ func initConfig() {
 				return
 			}
 		}
-	} else {
-		// if user specified the config file, use it
-		viper.SetConfigFile(cfgFileFlag)
 	}
 
 	viper.AutomaticEnv()
@@ -120,11 +135,21 @@ func initConfig() {
 	dockerPortFlag = getInt32Arg("docker-port")
 	dnsSvcHostFlag = getStringArg("dns-host")
 	aliasRepoPathFlag = getStringArg("alias-repo")
+	cloudAccessKeyFlag = getStringArg("cloud-access-key")
+	cloudPrivateKeyFlag = getStringArg("cloud-private-key")
+	cloudIDFlag = getStringArg("cloud-id")
+	cloudProjectID = getStringArg("cloud-project-id")
+
+	fmt.Println(aliasRepoPath)
 
 	dockerRegistry = dockerRegistryFlag
 	dockerHost = dockerHostFlag
 	dnsSvcHost = dnsSvcHostFlag
 	aliasRepoPath = aliasRepoPathFlag
+	cloudAccessKey = cloudAccessKeyFlag
+	cloudPrivateKey = cloudPrivateKeyFlag
+	cloudID = cloudIDFlag
+	cloudProjectID = cloudProjectIDFlag
 
 	if dockerPortFlag > 0 {
 		dockerHost = fmt.Sprintf("tcp://%s:%d", dockerHostFlag, dockerPortFlag)
@@ -140,6 +165,7 @@ func createConfigFile(configFile string) error {
 	tmap.Set("docker-registry", dockerRegistryFlag)
 	tmap.Set("docker-host", dockerHostFlag)
 	tmap.Set("dns-host", dnsSvcHostFlag)
+	tmap.Set("alias-repo", aliasRepoPathFlag)
 
 	if dockerPortFlag > 0 {
 		tmap.Set("docker-port", dockerPortFlag)
@@ -153,6 +179,7 @@ type daemon struct {
 	systemCtx context.Context
 
 	dockerService *docker.DockerService
+	cloudService  *cloud.CloudService
 }
 
 func (d *daemon) openMeta() error {
@@ -187,13 +214,19 @@ func (d *daemon) hasMacvlan0(cli *client.Client) bool {
 }
 
 func (d *daemon) getAllClusters(ctx context.Context) ([]*cluster.Cluster, error) {
-	clusters, err := d.dockerService.GetAllClusters(ctx)
+	dockerClusters, err := d.dockerService.GetAllClusters(ctx)
 	if err != nil {
 		log.Printf("Failed to get all clusters %v\n", err)
 		return nil, err
 	}
 
-	return clusters, nil
+	cloudClusters, err := d.cloudService.GetAllClusters(ctx)
+	if err != nil && !errors.Is(err, cloud.ErrCloudNotEnabled) {
+		log.Printf("Failed to get all clusters %v\n", err)
+		return nil, err
+	}
+
+	return append(dockerClusters, cloudClusters...), nil
 }
 
 func (d *daemon) cleanupClusters() {
@@ -213,15 +246,32 @@ func (d *daemon) cleanupClusters() {
 
 	var wg sync.WaitGroup
 	for _, clusterID := range clustersToKill {
+		meta, err := d.metaStore.GetClusterMeta(clusterID)
+		if err != nil {
+			log.Printf("Failed to kill cluster %s: %v\n", clusterID, err)
+			continue
+		}
+
 		wg.Add(1)
-		go func(clusterID string) {
-			if err := d.dockerService.KillCluster(d.systemCtx, clusterID); err != nil {
+		go func(clusterID string, platform store.ClusterPlatform) {
+			var s service.ClusterService
+			if platform == store.ClusterPlatformCloud {
+				s = d.cloudService
+			} else if meta.Platform == store.ClusterPlatformDocker {
+				s = d.dockerService
+			} else {
+				log.Printf("Cluster found with no platform, assuming docker: %s", clusterID)
+				s = d.dockerService
+			}
+
+			if err := s.KillCluster(d.systemCtx, clusterID); err != nil {
 				log.Printf("Failed to kill cluster %s: %v\n", clusterID, err)
 			}
 			wg.Done()
-		}(clusterID)
+		}(clusterID, meta.Platform)
 	}
 
+	wg.Wait()
 	return
 }
 
@@ -264,6 +314,7 @@ func newDaemon() *daemon {
 
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
 	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, readOnlyStore)
+	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudID, cloudProjectID, cloudURL, readOnlyStore)
 
 	// Create a system context to use for system actions (like cleanups)
 	d.systemCtx = dyncontext.NewContext(context.Background(), "system", true)
