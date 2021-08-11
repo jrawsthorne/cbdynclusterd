@@ -87,8 +87,6 @@ func flavorFromVersion(version string) (string, error) {
 
 	if minor >= 5 {
 		minor = 5
-	} else {
-		minor = 0
 	}
 
 	flavor, ok := versionToFlavor[major][minor]
