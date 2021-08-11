@@ -69,7 +69,7 @@ var versionToFlavor = map[int]map[int]string{
 	4: {0: "sherlock", 5: "watson"},
 	5: {0: "spock", 5: "vulcan"},
 	6: {0: "alice", 5: "mad-hatter"},
-	7: {0: "cheshire-cat"},
+	7: {0: "cheshire-cat", 1: "neo"},
 }
 
 func flavorFromVersion(version string) (string, error) {
