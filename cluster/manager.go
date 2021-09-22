@@ -282,7 +282,7 @@ func (m *Manager) setupNewCluster() (string, error) {
 
 	// create a bucket
 	if len(m.Config.Bucket.Name) > 0 {
-		if err = m.SetupBucket(m.Config.Bucket.Name, m.Config.Bucket.Type, m.Config.Bucket.Password); err != nil {
+		if err = m.SetupBucket(m.Config.Bucket.Name, m.Config.Bucket.Type, m.Config.Bucket.Password, m.Config.Bucket.StorageBackend); err != nil {
 			return "", err
 		}
 	}
@@ -522,7 +522,7 @@ func (m *Manager) ChangeBucketCompression(bucket, mode string) error {
 	return m.Nodes[m.epNode].WaitForBucketReady()
 }
 
-func (m *Manager) SetupBucket(bucketName, bucketType, bucketPassword string) error {
+func (m *Manager) SetupBucket(bucketName, bucketType, bucketPassword string, storageBackend string) error {
 	var bType string
 	switch bucketType {
 	case "memcached":
@@ -538,6 +538,7 @@ func (m *Manager) SetupBucket(bucketName, bucketType, bucketPassword string) err
 		RamQuotaMB:        "256",
 		ReplicaCount:      1,
 		EphEvictionPolicy: "noEviction",
+		StorageBackend:    storageBackend,
 	}
 	if err := m.Nodes[m.epNode].CreateBucket(&bc); err != nil {
 		return err

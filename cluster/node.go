@@ -375,6 +375,13 @@ func (n *Node) CreateBucket(conf *Bucket) error {
 	if conf.Type == helper.BucketEphemeral {
 		body = fmt.Sprintf("%s&evictionPolicy=%s", body, conf.EphEvictionPolicy)
 	}
+
+	major, minor, _ := helper.Tuple(n.Version)
+	// storageBackend supported on >= 7.1
+	if major > 7 || (major == 7 && minor >= 1) {
+		body = fmt.Sprintf("%s&storageBackend=%s", body, conf.StorageBackend)
+	}
+
 	restParam := &helper.RestCall{
 		ExpectedCode: 202,
 		Method:       "POST",

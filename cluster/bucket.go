@@ -6,4 +6,5 @@ type Bucket struct {
 	Name              string
 	ReplicaCount      int
 	EphEvictionPolicy string
+	StorageBackend    string
 }
