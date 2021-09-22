@@ -89,9 +89,10 @@ type UserOption struct {
 }
 
 type BucketOption struct {
-	Name     string
-	Type     string
-	Password string
+	Name           string
+	Type           string
+	Password       string
+	StorageBackend string
 }
 
 type stop struct {
@@ -317,15 +318,18 @@ func RestRetryer(retry int, params *RestCall, fn func(*RestCall) (string, error)
 }
 
 func Tuple(version string) (int, int, int) {
-	v, err := MatchingStrings("\\s*([0-9]+).([0-9]+).([0-9,^-]+)\\s*", version)
+	v := strings.Split(version, "-")[0]
+	parsed := strings.Split(v, ".")
 
-	if err != nil {
+	if len(parsed) != 3 {
 		return 0, 0, 0
 	}
-	v1, _ := strconv.Atoi(v[1])
-	v2, _ := strconv.Atoi(v[2])
-	v3, _ := strconv.Atoi(v[3])
-	return v1, v2, v3
+
+	major, _ := strconv.Atoi(parsed[0])
+	minor, _ := strconv.Atoi(parsed[1])
+	patch, _ := strconv.Atoi(parsed[2])
+
+	return major, minor, patch
 }
 
 func GetResponse(params *RestCall) (string, error) {

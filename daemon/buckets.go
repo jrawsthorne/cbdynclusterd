@@ -44,14 +44,16 @@ func addBucket(ctx context.Context, clusterID string, opts AddBucketOptions) err
 		Port:      strconv.Itoa(helper.RestPort),
 		SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
 		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.RestPort},
+		Version:   n.InitialServerVersion,
 	}
 
 	return node.CreateBucket(&cluster.Bucket{
-		Name:         opts.Conf.Name,
-		Type:         opts.Conf.BucketType,
-		ReplicaCount: opts.Conf.ReplicaCount,
-		RamQuotaMB:   strconv.Itoa(opts.Conf.RamQuota),
+		Name:              opts.Conf.Name,
+		Type:              opts.Conf.BucketType,
+		ReplicaCount:      opts.Conf.ReplicaCount,
+		RamQuotaMB:        strconv.Itoa(opts.Conf.RamQuota),
 		EphEvictionPolicy: opts.Conf.EvictionPolicy,
+		StorageBackend:    opts.Conf.StorageBackend,
 	})
 }
 

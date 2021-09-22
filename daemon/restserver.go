@@ -459,13 +459,14 @@ func HttpDeleteCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 type AddBucketJSON struct {
-	Name         string `json:"name"`
-	StorageMode  string `json:"storage_mode"`
-	RamQuota     int    `json:"ram_quota"`
-	UseHostname  bool   `json:"use_hostname"`
-	ReplicaCount int    `json:"replica_count"`
-	BucketType   string `json:"bucket_type"`
-	EvictionPolicy   string `json:"eviction_policy"`
+	Name           string `json:"name"`
+	StorageMode    string `json:"storage_mode"`
+	RamQuota       int    `json:"ram_quota"`
+	UseHostname    bool   `json:"use_hostname"`
+	ReplicaCount   int    `json:"replica_count"`
+	BucketType     string `json:"bucket_type"`
+	EvictionPolicy string `json:"eviction_policy"`
+	StorageBackend string `json:"storage_backend"`
 }
 
 func HttpAddBucket(w http.ResponseWriter, r *http.Request) {
