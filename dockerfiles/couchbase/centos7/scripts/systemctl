@@ -3,7 +3,7 @@
 export PATH=$PATH:/opt/couchbase/bin:/opt/couchbase/bin/tools:/opt/couchbase/bin/install:/usr/local/bin/
 service() {
    if [ "$1" == "stop" ]; then
-      ps aux | grep couchbase | grep -v grep | grep -v systemctl | awk '{print $2}' | xargs kill
+      couchbase-server -k
       echo "couchbase service stopped"
    fi
    
