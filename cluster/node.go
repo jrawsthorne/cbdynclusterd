@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"path"
@@ -1086,7 +1085,13 @@ func newSession(sshLogin *helper.Cred) *ssh.Session {
 	return session
 }
 
-func (n *Node) SetupCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey, now time.Time) error {
+func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKey, now time.Time, clusterVersion string, rootIndex int) error {
+	var caPrivateKey = caPrivateKeys[rootIndex]
+	var ca = cas[rootIndex]
+
+	major, minor, _ := helper.Tuple(clusterVersion)
+	supportsMultipleRoots := major > 7 || (major == 7 && minor >= 1)
+
 	nodePrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return fmt.Errorf("failed to generate private key: %w", err)
@@ -1113,12 +1118,12 @@ func (n *Node) SetupCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey, now
 		return fmt.Errorf("failed to create node sftp client: %w", err)
 	}
 
-	err = sftpClient.Mkdir("/opt/couchbase/var/lib/couchbase/inbox")
+	err = sftpClient.MkdirAll("/opt/couchbase/var/lib/couchbase/inbox")
 	if err != nil {
-		log.Printf("Failed to create node inbox: %s\n", err)
+		return fmt.Errorf("Failed to create node inbox: %s\n", err)
 	}
 
-	err = cbcerthelper.WriteRemoteCert("/opt/couchbase/var/lib/couchbase/inbox/chain.pem", "CERTIFICATE",
+	err = cbcerthelper.WriteRemoteCert("/opt/couchbase/var/lib/couchbase/inbox/chain.pem", cbcerthelper.CertTypeCertificate,
 		nodeCertBytes, sftpClient)
 	if err != nil {
 		return fmt.Errorf("failed to write node certificate: %w", err)
@@ -1129,9 +1134,29 @@ func (n *Node) SetupCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey, now
 		return fmt.Errorf("failed to write node key: %w", err)
 	}
 
-	err = cbcerthelper.UploadClusterCA(ca.Raw, n.RestLogin.Username, n.RestLogin.Password, n.HostName)
-	if err != nil {
-		return fmt.Errorf("failed to upload cluster CA: %w", err)
+	if supportsMultipleRoots {
+		err = sftpClient.MkdirAll("/opt/couchbase/var/lib/couchbase/inbox/CA")
+		if err != nil {
+			return fmt.Errorf("Failed to create CA inbox: %v\n", err)
+		}
+
+		for i, cert := range cas {
+			err = cbcerthelper.WriteRemoteCert(fmt.Sprintf("/opt/couchbase/var/lib/couchbase/inbox/CA/ca_%d.pem", i), cbcerthelper.CertTypeCertificate,
+				cert.Raw, sftpClient)
+			if err != nil {
+				return fmt.Errorf("failed to write root certificate: %w", err)
+			}
+		}
+
+		err = cbcerthelper.LoadTrustedCAs(n.RestLogin.Username, n.RestLogin.Password, n.HostName)
+		if err != nil {
+			return fmt.Errorf("failed to load trusted CAs: %w", err)
+		}
+	} else {
+		err = cbcerthelper.UploadClusterCA(ca.Raw, n.RestLogin.Username, n.RestLogin.Password, n.HostName)
+		if err != nil {
+			return fmt.Errorf("failed to upload cluster CA: %w", err)
+		}
 	}
 
 	err = cbcerthelper.ReloadClusterCert(n.RestLogin.Username, n.RestLogin.Password, n.HostName)

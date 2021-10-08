@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/couchbase/gocb v1.6.5
-	github.com/couchbaselabs/cbcerthelper v0.0.0-20200412115917-6e604a2b10e8
+	github.com/couchbaselabs/cbcerthelper v0.0.0-20211020105104-0915e6a9c3f2
 	github.com/dgraph-io/badger v1.6.0
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.13.1
