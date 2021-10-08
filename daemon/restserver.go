@@ -565,6 +565,7 @@ func HttpAddCollection(w http.ResponseWriter, r *http.Request) {
 type SetupClientCertAuthJSON struct {
 	UserName  string `json:"user"`
 	UserEmail string `json:"email"`
+	NumRoots  int    `json:"num_roots"`
 }
 
 type CertAuthResultJSON struct {
