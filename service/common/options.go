@@ -1,15 +1,9 @@
-package docker
+package common
 
 import (
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"time"
 )
-
-type AllocateClusterOptions struct {
-	Deadline time.Time
-	Nodes    []CreateNodeOptions
-}
 
 type ClusterSetupOptions struct {
 	Services            []string
