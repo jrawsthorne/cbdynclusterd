@@ -63,12 +63,13 @@ func (cs *CloudService) getCluster(ctx context.Context, cloudClusterID string) (
 	return &respBody, nil
 }
 
-func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID, name string) error {
+func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID string, opts service.AddBucketOptions) error {
 	log.Printf("Running cloud CreateBucket for %s: %s", clusterID, cloudClusterID)
 
 	body := bucketSpecJSON{
-		Name:        name,
-		MemoryQuota: 128,
+		Name:        opts.Name,
+		MemoryQuota: opts.RamQuota,
+		Replicas:    opts.ReplicaCount,
 	}
 
 	res, err := cs.client.Do(ctx, "POST", fmt.Sprintf(createBucketPath, cloudClusterID), body)
@@ -498,7 +499,12 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID, ip string, 
 	cs.deleteDefaultCloudBucket(ctx, clusterID, location)
 
 	if opts.Bucket != "" {
-		err = cs.addBucket(ctx, clusterID, location, opts.Bucket)
+		bucketOpts := service.AddBucketOptions{
+			Name:         opts.Bucket,
+			RamQuota:     256,
+			ReplicaCount: 1,
+		}
+		err = cs.addBucket(ctx, clusterID, location, bucketOpts)
 		if err != nil {
 			go func() {
 				cs.killCluster(ctx, clusterID, location)
@@ -559,7 +565,7 @@ func (cs *CloudService) AddBucket(ctx context.Context, clusterID string, opts se
 		return errors.New("unknown cluster")
 	}
 
-	return cs.addBucket(ctx, clusterID, meta.CloudClusterID, opts.Name)
+	return cs.addBucket(ctx, clusterID, meta.CloudClusterID, opts)
 }
 
 func (cs *CloudService) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions) error {

@@ -71,6 +71,7 @@ type databaseUserJSON struct {
 type bucketSpecJSON struct {
 	Name        string `json:"name"`
 	MemoryQuota int    `json:"memoryQuota"`
+	Replicas    int    `json:"replicas"`
 }
 
 type bucketDeleteJSON struct {
