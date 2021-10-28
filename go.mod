@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
-	github.com/couchbase/gocb v1.6.5
 	github.com/couchbaselabs/cbcerthelper v0.0.0-20211020105104-0915e6a9c3f2
 	github.com/dgraph-io/badger v1.6.0
 	github.com/docker/distribution v2.7.1+incompatible // indirect
@@ -13,7 +12,6 @@ require (
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/go-git/go-git/v5 v5.1.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
-	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.4
 	github.com/hnakamur/go-scp v0.0.0-20190410043705-badb3bf1aae2
@@ -21,7 +19,6 @@ require (
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
-	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pelletier/go-toml v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.11.0
@@ -29,10 +26,5 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.6.2
 	golang.org/x/crypto v0.0.0-20200403201458-baeed622b8d8
-	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect
-	gopkg.in/couchbase/gocbcore.v7 v7.1.16 // indirect
-	gopkg.in/couchbaselabs/gocbconnstr.v1 v1.0.4 // indirect
-	gopkg.in/couchbaselabs/gojcbmock.v1 v1.0.4 // indirect
-	gopkg.in/couchbaselabs/jsonx.v1 v1.0.0 // indirect
 	gopkg.in/yaml.v2 v2.2.4
 )
