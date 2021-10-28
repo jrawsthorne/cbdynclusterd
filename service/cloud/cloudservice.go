@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"strings"
+	"time"
+
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
 	"github.com/couchbaselabs/cbdynclusterd/service"
 	"github.com/couchbaselabs/cbdynclusterd/store"
-	"io/ioutil"
-	"log"
-	"strings"
-	"time"
 )
 
 type CloudService struct {
@@ -136,9 +137,9 @@ func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID, 
 
 	var u databaseUserJSON
 	if user == nil || user.Name == "" {
-		u = newDatabaseUser("Administrator", "Pa$$w0rd", bucket)
+		u = newDatabaseUser("Administrator", "Pa$$w0rd")
 	} else {
-		u = newDatabaseUser(user.Name, user.Password, bucket)
+		u = newDatabaseUser(user.Name, user.Password)
 	}
 
 	res, err := cs.client.Do(ctx, "POST", fmt.Sprintf(createUserPath, cloudClusterID), u)
@@ -409,14 +410,11 @@ func (cs *CloudService) KillAllClusters(ctx context.Context) error {
 	return nil
 }
 
-func newDatabaseUser(username, password, bucket string) databaseUserJSON {
+func newDatabaseUser(username, password string) databaseUserJSON {
 	return databaseUserJSON{
-		Username: username,
-		Password: password,
-		Access: []databaseUserRoleJSON{{
-			BucketName: bucket,
-			Roles:      []string{"data_writer", "data_reader"},
-		}},
+		Username:         username,
+		Password:         password,
+		AllBucketsAccess: []string{"data_writer", "data_reader"},
 	}
 }
 

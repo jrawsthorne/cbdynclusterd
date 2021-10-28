@@ -62,15 +62,10 @@ type setupClusterJson struct {
 	Version        string             `json:"version,omitempty"`
 }
 
-type databaseUserRoleJSON struct {
-	BucketName string   `json:"name"`
-	Roles      []string `json:"roles"`
-}
-
 type databaseUserJSON struct {
-	Username string                 `json:"username"`
-	Password string                 `json:"password"`
-	Access   []databaseUserRoleJSON `json:"access"`
+	Username         string   `json:"username"`
+	Password         string   `json:"password"`
+	AllBucketsAccess []string `json:"allBucketsAccess"`
 }
 
 type bucketSpecJSON struct {
