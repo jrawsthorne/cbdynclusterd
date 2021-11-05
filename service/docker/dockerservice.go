@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"log"
-	"strconv"
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
@@ -248,28 +247,7 @@ func (ds *DockerService) AddCollection(ctx context.Context, clusterID string, op
 }
 
 func (ds *DockerService) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions) (*service.CertAuthResult, error) {
-	c, err := ds.GetCluster(ctx, clusterID)
-	if err != nil {
-		return nil, err
-	}
-
-	initialNodes := c.Nodes
-	var nodes []Node
-	var clusterVersion = initialNodes[0].InitialServerVersion
-	for i := 0; i < len(initialNodes); i++ {
-		ipv4 := initialNodes[i].IPv4Address
-		hostname := ipv4
-
-		nodeHost := Node{
-			HostName:  hostname,
-			Port:      strconv.Itoa(helper.RestPort),
-			SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
-			RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.RestPort},
-		}
-		nodes = append(nodes, nodeHost)
-	}
-
-	return ds.setupCertAuth(opts.UserName, opts.UserEmail, nodes, clusterVersion, opts.NumRoots)
+	return common.SetupCertAuth(ctx, ds, clusterID, opts)
 }
 
 func (ds *DockerService) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions) error {

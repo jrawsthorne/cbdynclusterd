@@ -12,7 +12,7 @@ import (
 	"github.com/couchbaselabs/cbdynclusterd/service"
 )
 
-func (ds *DockerService) setupCertAuth(username, email string, nodes []Node, clusterVersion string, numRoots int) (*service.CertAuthResult, error) {
+func setupCertAuth(username, email string, nodes []Node, clusterVersion string, numRoots int) (*service.CertAuthResult, error) {
 
 	var rootKeys = []*rsa.PrivateKey{}
 	var rootCerts = []*x509.Certificate{}

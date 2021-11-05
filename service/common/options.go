@@ -3,7 +3,6 @@ package common
 import (
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
-	"time"
 )
 
 type ClusterSetupOptions struct {
