@@ -151,6 +151,7 @@ func SetupCertAuth(ctx context.Context, s service.ClusterService, clusterID stri
 	}
 
 	initialNodes := c.Nodes
+	clusterVersion := initialNodes[0].InitialServerVersion
 	var nodes []Node
 	for i := 0; i < len(initialNodes); i++ {
 		ipv4 := initialNodes[i].IPv4Address
@@ -165,7 +166,7 @@ func SetupCertAuth(ctx context.Context, s service.ClusterService, clusterID stri
 		nodes = append(nodes, nodeHost)
 	}
 
-	return setupCertAuth(opts.UserName, opts.UserEmail, nodes)
+	return setupCertAuth(opts.UserName, opts.UserEmail, nodes, clusterVersion, opts.NumRoots)
 }
 
 func AddCollection(ctx context.Context, s service.ClusterService, clusterID string, opts service.AddCollectionOptions) error {
