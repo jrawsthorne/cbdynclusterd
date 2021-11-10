@@ -60,11 +60,11 @@ source "amazon-ebs" "amzn2" {
   launch_block_device_mappings {
     device_name           = "/dev/xvda"
     volume_size           = 40
-    volume_type           = "gp2"
+    volume_type           = "gp3"
     delete_on_termination = true
   }
   snapshot_tags = {
-    linked_ami = var.ami_name
+    Name = var.ami_name
   }
 }
 
@@ -77,6 +77,7 @@ build {
       "curl -u ${var.download_username}:${var.download_password} -o ${var.build_pkg} -s ${local.build_url}",
       "sudo yum install -y ${var.build_pkg}",
       "rm ${var.build_pkg}",
+      "sudo usermod -a -G couchbase ec2-user"
     ]
   }
 }
