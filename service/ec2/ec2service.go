@@ -176,12 +176,16 @@ func (s *EC2Service) allocateNode(ctx context.Context, clusterID string, timeout
 	}
 
 	ami := out.Images[0].ImageId
+	instanceType := types.InstanceTypeM4Xlarge
+	if opts.VersionInfo.Arch == "aarch64" {
+		instanceType = types.InstanceTypeT4gXlarge
+	}
 
 	createdInstances, err := s.client.RunInstances(ctx, &ec2.RunInstancesInput{
 		MaxCount:         aws.Int32(1),
 		MinCount:         aws.Int32(1),
 		ImageId:          ami,
-		InstanceType:     types.InstanceTypeT4gXlarge,
+		InstanceType:     instanceType,
 		KeyName:          aws.String(s.keyName),
 		SecurityGroupIds: []string{*aws.String(s.securityGroup)},
 		TagSpecifications: []types.TagSpecification{
