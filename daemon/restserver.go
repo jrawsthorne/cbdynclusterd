@@ -691,10 +691,17 @@ func (d *daemon) HttpSetupClientCertAuth(w http.ResponseWriter, r *http.Request)
 		s = d.dockerService
 	}
 
+	var numRoots int
+	if reqData.NumRoots > 0 {
+		numRoots = reqData.NumRoots
+	} else {
+		numRoots = 1
+	}
+
 	certData, err := s.SetupCertAuth(reqCtx, clusterID, service.SetupClientCertAuthOptions{
 		UserName:  reqData.UserName,
 		UserEmail: reqData.UserEmail,
-		NumRoots:  reqData.NumRoots,
+		NumRoots:  numRoots,
 	})
 	if err != nil {
 		writeJSONError(w, err)
