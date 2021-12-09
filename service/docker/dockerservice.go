@@ -127,36 +127,34 @@ func (ds *DockerService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster
 	return clusters, nil
 }
 
-func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.AllocateClusterOptions) (string, error) {
+func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.AllocateClusterOptions) error {
 	log.Printf("Allocating cluster (requested by: %s)", dyncontext.ContextUser(ctx))
 
 	if len(opts.Nodes) == 0 {
-		return "", errors.New("must specify at least a single node for the cluster")
+		return errors.New("must specify at least a single node for the cluster")
 	}
 	if len(opts.Nodes) > 10 {
-		return "", errors.New("cannot allocate clusters with more than 10 nodes")
+		return errors.New("cannot allocate clusters with more than 10 nodes")
 	}
 
 	if err := common.GetConfigRepo(ds.aliasRepoPath); err != nil {
 		log.Printf("Get config failed: %v", err)
-		return "", err
+		return err
 	}
-
-	clusterID := helper.NewRandomClusterID()
 
 	nodesToAllocate, err := common.CreateNodesToAllocate(opts.Nodes, ds.aliasRepoPath)
 
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(nodesToAllocate) > 0 {
 		// We assume that all nodes are using the same server version.
 		node := nodesToAllocate[0]
 
-		err := ds.ensureImageExists(ctx, node.VersionInfo, clusterID)
+		err := ds.ensureImageExists(ctx, node.VersionInfo, opts.ClusterID)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
@@ -166,7 +164,7 @@ func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.Alloc
 		go func(clusterID string, node common.NodeOptions) {
 			_, err := ds.allocateNode(ctx, clusterID, opts.Deadline, node)
 			signal <- err
-		}(clusterID, node)
+		}(opts.ClusterID, node)
 	}
 
 	var createError error
@@ -177,11 +175,11 @@ func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.Alloc
 		}
 	}
 	if createError != nil {
-		ds.KillCluster(ctx, clusterID)
-		return "", createError
+		ds.KillCluster(ctx, opts.ClusterID)
+		return createError
 	}
 
-	return clusterID, nil
+	return nil
 }
 
 func (ds *DockerService) KillCluster(ctx context.Context, clusterID string) error {

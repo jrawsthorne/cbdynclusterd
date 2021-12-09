@@ -134,17 +134,10 @@ func (d *daemon) HttpCreateCluster(w http.ResponseWriter, r *http.Request) {
 	if platform == store.ClusterPlatformCloud {
 		writeJSONError(w, errors.New("cannot allocate a cluster using the cloud service"))
 		return
-	} else if platform == store.ClusterPlatformDocker {
-		s = d.dockerService
-	} else if platform == store.ClusterPlatformEC2 {
-		s = d.ec2Service
 	}
 
-	clusterID, err := s.AllocateCluster(reqCtx, clusterOpts)
-	if err != nil {
-		writeJSONError(w, err)
-		return
-	}
+	clusterID := helper.NewRandomClusterID()
+	clusterOpts.ClusterID = clusterID
 
 	meta := store.ClusterMeta{
 		Owner:    dyncontext.ContextUser(reqCtx),
@@ -152,6 +145,18 @@ func (d *daemon) HttpCreateCluster(w http.ResponseWriter, r *http.Request) {
 		Platform: store.ClusterPlatform(platform),
 	}
 	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	if platform == store.ClusterPlatformDocker {
+		s = d.dockerService
+	} else if platform == store.ClusterPlatformEC2 {
+		s = d.ec2Service
+	}
+
+	err = s.AllocateCluster(reqCtx, clusterOpts)
+	if err != nil {
 		writeJSONError(w, err)
 		return
 	}
