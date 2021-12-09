@@ -55,40 +55,38 @@ func NewEC2Service(aliasRepoPath, securityGroup, keyName, downloadPassword strin
 	}
 }
 
-func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateClusterOptions) (string, error) {
+func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateClusterOptions) error {
 	if !s.enabled {
-		return "", ErrEC2NotEnabled
+		return ErrEC2NotEnabled
 	}
 
 	log.Printf("Allocating cluster (requested by: %s)", dyncontext.ContextUser(ctx))
 
 	if len(opts.Nodes) == 0 {
-		return "", errors.New("must specify at least a single node for the cluster")
+		return errors.New("must specify at least a single node for the cluster")
 	}
 	if len(opts.Nodes) > 10 {
-		return "", errors.New("cannot allocate clusters with more than 10 nodes")
+		return errors.New("cannot allocate clusters with more than 10 nodes")
 	}
 
 	if err := common.GetConfigRepo(s.aliasRepoPath); err != nil {
 		log.Printf("Get config failed: %v", err)
-		return "", err
+		return err
 	}
-
-	clusterID := helper.NewRandomClusterID()
 
 	nodesToAllocate, err := common.CreateNodesToAllocate(opts.Nodes, s.aliasRepoPath)
 
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(nodesToAllocate) > 0 {
 		// We assume that all nodes are using the same server version.
 		node := nodesToAllocate[0]
 
-		err := s.ensureImageExists(ctx, node.VersionInfo, clusterID)
+		err := s.ensureImageExists(ctx, node.VersionInfo, opts.ClusterID)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
@@ -98,7 +96,7 @@ func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateC
 		go func(clusterID string, node common.NodeOptions) {
 			_, err := s.allocateNode(ctx, clusterID, opts.Deadline, node)
 			signal <- err
-		}(clusterID, node)
+		}(opts.ClusterID, node)
 	}
 
 	var createError error
@@ -109,11 +107,11 @@ func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateC
 		}
 	}
 	if createError != nil {
-		s.KillCluster(ctx, clusterID)
-		return "", createError
+		s.KillCluster(ctx, opts.ClusterID)
+		return createError
 	}
 
-	return clusterID, nil
+	return nil
 }
 
 func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.NodeVersion, clusterID string) error {
@@ -378,21 +376,8 @@ func (s *EC2Service) KillCluster(ctx context.Context, clusterID string) error {
 		nodesToKill = append(nodesToKill, node.ContainerID)
 	}
 
-	signal := make(chan error)
+	killError := s.terminateInstances(ctx, nodesToKill)
 
-	for _, nodeID := range nodesToKill {
-		go func(nodeID string) {
-			signal <- s.terminateInstance(ctx, nodeID)
-		}(nodeID)
-	}
-
-	var killError error
-	for range nodesToKill {
-		err := <-signal
-		if err != nil && killError == nil {
-			killError = err
-		}
-	}
 	if killError != nil {
 		return killError
 	}
@@ -425,9 +410,9 @@ func (s *EC2Service) ConnString(ctx context.Context, clusterID string, useSSL bo
 	return common.ConnString(ctx, s, clusterID, useSSL)
 }
 
-func (s *EC2Service) terminateInstance(ctx context.Context, instanceId string) error {
+func (s *EC2Service) terminateInstances(ctx context.Context, instanceIds []string) error {
 	_, err := s.client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
-		InstanceIds: []string{instanceId},
+		InstanceIds: instanceIds,
 	})
 
 	return err

@@ -15,8 +15,9 @@ type CertAuthResult struct {
 }
 
 type AllocateClusterOptions struct {
-	Deadline time.Time
-	Nodes    []CreateNodeOptions
+	ClusterID string
+	Deadline  time.Time
+	Nodes     []CreateNodeOptions
 }
 
 type CreateNodeOptions struct {
@@ -42,5 +43,5 @@ type ClusterService interface {
 }
 
 type UnmanagedClusterService interface {
-	AllocateCluster(ctx context.Context, opts AllocateClusterOptions) (string, error)
+	AllocateCluster(ctx context.Context, opts AllocateClusterOptions) error
 }
