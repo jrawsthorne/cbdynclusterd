@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -36,7 +37,9 @@ type EC2Service struct {
 func NewEC2Service(aliasRepoPath, securityGroup, keyName, downloadPassword string, metaStore *store.ReadOnlyMetaDataStore) *EC2Service {
 	enabled := true
 	client := &ec2.Client{}
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRetryer(func() aws.Retryer {
+		return retry.AddWithMaxAttempts(retry.NewStandard(), 0) // keep retrying requests if the error is retryable
+	}))
 	if err != nil {
 		enabled = false
 	} else {
@@ -90,25 +93,11 @@ func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateC
 		}
 	}
 
-	signal := make(chan error)
+	_, err = s.allocateNodes(ctx, opts.ClusterID, nodesToAllocate)
 
-	for _, node := range nodesToAllocate {
-		go func(clusterID string, node common.NodeOptions) {
-			_, err := s.allocateNode(ctx, clusterID, opts.Deadline, node)
-			signal <- err
-		}(opts.ClusterID, node)
-	}
-
-	var createError error
-	for range nodesToAllocate {
-		err := <-signal
-		if err != nil && createError == nil {
-			createError = err
-		}
-	}
-	if createError != nil {
+	if err != nil {
 		s.KillCluster(ctx, opts.ClusterID)
-		return createError
+		return err
 	}
 
 	return nil
@@ -150,11 +139,13 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 	return err
 }
 
-func (s *EC2Service) allocateNode(ctx context.Context, clusterID string, timeout time.Time, opts common.NodeOptions) (string, error) {
-	log.Printf("Allocating node for cluster %s (requested by: %s)", clusterID, dyncontext.ContextUser(ctx))
+func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts []common.NodeOptions) ([]string, error) {
+	log.Printf("Allocating nodes for cluster %s (requested by: %s)", clusterID, dyncontext.ContextUser(ctx))
 
-	imageName := opts.VersionInfo.ToImageName("cbdyncluster")
-	instanceName := fmt.Sprintf("dynclsr-%s-%s", clusterID, opts.Name)
+	options := opts[0]
+
+	imageName := options.VersionInfo.ToImageName("cbdyncluster")
+	instanceCount := len(opts)
 
 	out, err := s.client.DescribeImages(ctx, &ec2.DescribeImagesInput{
 		Filters: []types.Filter{
@@ -166,22 +157,22 @@ func (s *EC2Service) allocateNode(ctx context.Context, clusterID string, timeout
 	})
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if len(out.Images) != 1 {
-		return "", errors.New("no image found")
+		return nil, errors.New("no image found")
 	}
 
 	ami := out.Images[0].ImageId
 	instanceType := types.InstanceTypeM4Xlarge
-	if opts.VersionInfo.Arch == "aarch64" {
+	if options.VersionInfo.Arch == "aarch64" {
 		instanceType = types.InstanceTypeT4gXlarge
 	}
 
 	createdInstances, err := s.client.RunInstances(ctx, &ec2.RunInstancesInput{
-		MaxCount:         aws.Int32(1),
-		MinCount:         aws.Int32(1),
+		MaxCount:         aws.Int32(int32(instanceCount)),
+		MinCount:         aws.Int32(int32(instanceCount)),
 		ImageId:          ami,
 		InstanceType:     instanceType,
 		KeyName:          aws.String(s.keyName),
@@ -190,40 +181,59 @@ func (s *EC2Service) allocateNode(ctx context.Context, clusterID string, timeout
 			{
 				ResourceType: "instance",
 				Tags: []types.Tag{{
-					Key:   aws.String("Name"),
-					Value: aws.String(instanceName),
-				}, {
 					Key:   aws.String("com.couchbase.dyncluster.cluster_id"),
 					Value: aws.String(clusterID),
 				}, {
 					Key:   aws.String("com.couchbase.dyncluster.creator"),
 					Value: aws.String(dyncontext.ContextUser(ctx)),
 				}, {
-					Key:   aws.String("com.couchbase.dyncluster.node_name"),
-					Value: aws.String(opts.Name),
-				}, {
 					Key:   aws.String("com.couchbase.dyncluster.initial_server_version"),
-					Value: aws.String(opts.ServerVersion),
+					Value: aws.String(options.ServerVersion),
 				}},
 			},
 		},
 	})
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	instanceId := *createdInstances.Instances[0].InstanceId
+	instanceIds := make([]string, 0, instanceCount)
+	for _, instance := range createdInstances.Instances {
+		instanceIds = append(instanceIds, *instance.InstanceId)
+	}
+
+	if len(instanceIds) != instanceCount {
+		return nil, errors.New("could not create all instances")
+	}
+
+	// tag each instance after creation so each has a unique name
+	for i, instanceId := range instanceIds {
+		instanceName := fmt.Sprintf("dynclsr-%s-%s", clusterID, opts[i].Name)
+		_, err := s.client.CreateTags(ctx, &ec2.CreateTagsInput{
+			Resources: []string{instanceId},
+			Tags: []types.Tag{{
+				Key:   aws.String("Name"),
+				Value: aws.String(instanceName),
+			}, {
+				Key:   aws.String("com.couchbase.dyncluster.node_name"),
+				Value: aws.String(opts[i].Name),
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	err = ec2.NewInstanceRunningWaiter(s.client).Wait(ctx, &ec2.DescribeInstancesInput{
-		InstanceIds: []string{instanceId},
+		InstanceIds: instanceIds,
 	}, 120*time.Second)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return instanceId, nil
+	return instanceIds, nil
 }
 
 func (s *EC2Service) getFilteredClusters(ctx context.Context, filters []types.Filter) ([]*cluster.Cluster, error) {
