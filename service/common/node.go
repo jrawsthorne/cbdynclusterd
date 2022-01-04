@@ -169,6 +169,69 @@ func (n *Node) Provision() error {
 	return err
 }
 
+func (n *Node) ManageExternalListener(enable bool) error {
+	setting := "off"
+	path := helper.PDisableExternalListener
+	if enable {
+		setting = "on"
+		path = helper.PEnableExternalListener
+	}
+	body := fmt.Sprintf("nodeEncryption=%s", setting)
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "POST",
+		Path:         path,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	}
+	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	return err
+}
+
+func (n *Node) EnableClusterEncryption() error {
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "POST",
+		Path:         helper.PSetupNetConfig,
+		Cred:         n.RestLogin,
+		Body:         "nodeEncryption=on",
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	}
+	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	return err
+}
+
+func (n *Node) SetClusterEncryptionLevel(level string) error {
+	body := fmt.Sprintf("clusterEncryptionLevel=%s", level)
+
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "POST",
+		Path:         helper.PSecurity,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	}
+	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	return err
+}
+
+func (n *Node) AllowStrictEncryption() error {
+	body := fmt.Sprintf("canEnableStrictEncryption=true")
+
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "POST",
+		Path:         helper.PInternalSettings,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	}
+	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	return err
+}
+
 func (n *Node) SetMemoryQuota(quota string) error {
 	body := fmt.Sprintf("memoryQuota=%s", quota)
 
@@ -267,6 +330,41 @@ func (n *Node) SetupMemoryQuota(memoryQuota int) error {
 	}
 
 	return err
+}
+
+func (n *Node) SetAutoFailover(enable bool) error {
+	enableStr := "false"
+	if enable {
+		enableStr = "true"
+	}
+	body := fmt.Sprintf("enabled=%s", enableStr)
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		RetryOnCode:  400,
+		Method:       "POST",
+		Path:         helper.PAutoFailover,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	}
+	_, err := helper.RestRetryer(20, restParam, helper.GetResponse)
+
+	return err
+}
+
+func (n *Node) IsAutoFailoverEnabled() (bool, error) {
+	parsed := make(map[string]interface{})
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "GET",
+		Path:         helper.PAutoFailover,
+		Cred:         n.RestLogin,
+	}
+	resp, err := helper.RestRetryer(20, restParam, helper.GetResponse)
+	if err = json.Unmarshal([]byte(resp), &parsed); err != nil {
+		return false, err
+	}
+	return parsed["enabled"].(bool), nil
 }
 
 func (n *Node) SetupInitialService() error {

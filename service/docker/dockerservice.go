@@ -248,6 +248,10 @@ func (ds *DockerService) SetupCertAuth(ctx context.Context, clusterID string, op
 	return common.SetupCertAuth(ctx, ds, clusterID, opts)
 }
 
+func (s *DockerService) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions) error {
+	return common.SetupClusterEncryption(ctx, s, clusterID, opts)
+}
+
 func (ds *DockerService) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions) error {
 	return common.AddBucket(ctx, ds, clusterID, opts)
 }

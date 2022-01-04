@@ -5,6 +5,7 @@ type AddCollectionOptions struct {
 	ScopeName   string
 	BucketName  string
 	UseHostname bool
+	UseSecure   bool
 }
 
 type SetupClientCertAuthOptions struct {
@@ -22,9 +23,16 @@ type AddBucketOptions struct {
 	BucketType     string
 	EvictionPolicy string
 	StorageBackend string
+	UseSecure      bool
 }
 
 type AddSampleOptions struct {
 	SampleBucket string
 	UseHostname  bool
+	UseSecure    bool
+}
+
+type SetupClusterEncryptionOptions struct {
+	Level     string
+	UseSecure bool
 }

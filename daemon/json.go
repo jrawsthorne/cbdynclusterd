@@ -185,6 +185,10 @@ type CreateClusterSetupJSON struct {
 	UseDeveloperPreview bool                 `json:"developer_preview"`
 }
 
+type SetupClusterEncryptionJSON struct {
+	Level string `json:"level"`
+}
+
 type CreateClusterJSON struct {
 	Timeout string                  `json:"timeout"`
 	Nodes   []CreateClusterNodeJSON `json:"nodes"`

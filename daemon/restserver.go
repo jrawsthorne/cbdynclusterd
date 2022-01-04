@@ -305,6 +305,66 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+func (d *daemon) HttpSetupClusterEncryption(w http.ResponseWriter, r *http.Request) {
+	reqCtx, err := getHttpContext(r)
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	clusterID := mux.Vars(r)["cluster_id"]
+
+	var reqData SetupClusterEncryptionJSON
+	err = readJsonRequest(r, &reqData)
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	meta, err := d.metaStore.GetClusterMeta(clusterID)
+	if err != nil {
+		log.Printf("Encountered unregistered cluster: %s", clusterID)
+		writeJSONError(w, err)
+		return
+	}
+
+	var s service.ClusterService
+	if meta.Platform == store.ClusterPlatformCloud {
+		writeJSONError(w, errors.New("cannot setup a cloud cluster"))
+		return
+	} else if meta.Platform == store.ClusterPlatformDocker {
+		s = d.dockerService
+	} else if meta.Platform == store.ClusterPlatformEC2 {
+		s = d.ec2Service
+	} else {
+		log.Printf("Cluster found with no platform, assuming docker: %s", clusterID)
+		s = d.dockerService
+	}
+
+	useSecure := reqData.Level == "strict"
+
+	// update meta so we know to connect over secure ports or not for commands
+	err = d.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
+		meta.UseSecure = useSecure
+		return meta, nil
+	})
+	if err != nil {
+		writeJSONError(w, errors.New("couldn't update cluster meta"))
+		return
+	}
+
+	err = common.SetupClusterEncryption(reqCtx, s, clusterID, service.SetupClusterEncryptionOptions{
+		Level:     reqData.Level,
+		UseSecure: useSecure,
+	})
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	w.WriteHeader(200)
+}
+
 func (d *daemon) HttpUpdateCluster(w http.ResponseWriter, r *http.Request) {
 	reqCtx, err := getHttpContext(r)
 	if err != nil {
@@ -421,6 +481,7 @@ func (d *daemon) HttpAddBucket(w http.ResponseWriter, r *http.Request) {
 		BucketType:     reqData.BucketType,
 		EvictionPolicy: reqData.EvictionPolicy,
 		StorageBackend: reqData.StorageBackend,
+		UseSecure:      meta.UseSecure,
 	})
 	if err != nil {
 		writeJSONError(w, err)
@@ -468,6 +529,7 @@ func (d *daemon) HttpAddSampleBucket(w http.ResponseWriter, r *http.Request) {
 	err = s.AddSampleBucket(reqCtx, clusterID, service.AddSampleOptions{
 		SampleBucket: reqData.SampleBucket,
 		UseHostname:  reqData.UseHostname,
+		UseSecure:    meta.UseSecure,
 	})
 	if err != nil {
 		writeJSONError(w, err)
@@ -517,6 +579,7 @@ func (d *daemon) HttpAddCollection(w http.ResponseWriter, r *http.Request) {
 		ScopeName:   reqData.ScopeName,
 		BucketName:  reqData.BucketName,
 		UseHostname: reqData.UseHostname,
+		UseSecure:   meta.UseSecure,
 	})
 	if err != nil {
 		writeJSONError(w, err)
@@ -880,6 +943,7 @@ func (d *daemon) createRESTRouter() *mux.Router {
 	r.HandleFunc("/cluster/{cluster_id}", d.HttpGetCluster).Methods("GET")
 	r.HandleFunc("/cluster/{cluster_id}", d.HttpUpdateCluster).Methods("PUT")
 	r.HandleFunc("/cluster/{cluster_id}/setup", d.HttpSetupCluster).Methods("POST")
+	r.HandleFunc("/cluster/{cluster_id}/setup-cluster-encryption", d.HttpSetupClusterEncryption).Methods("POST")
 	r.HandleFunc("/cluster/{cluster_id}", d.HttpDeleteCluster).Methods("DELETE")
 	r.HandleFunc("/cluster/{cluster_id}/add-bucket", d.HttpAddBucket).Methods("POST")
 	r.HandleFunc("/cluster/{cluster_id}/add-sample-bucket", d.HttpAddSampleBucket).Methods("POST")

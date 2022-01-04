@@ -1,16 +1,18 @@
 package helper
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/golang/glog"
 )
@@ -29,41 +31,50 @@ var (
 )
 
 const (
-	RestRetry          = 60
-	RestTimeout        = 60 * time.Second
-	WaitTimeout        = 30 * time.Second
-	restInterval       = 3 * time.Second
-	SshPort            = 22
-	RestPort           = 8091
-	N1qlPort           = 8093
-	FtsPort            = 8094
-	SshUser            = "root"
-	SshPass            = "couchbase"
-	RestUser           = "Administrator"
-	RestPass           = "password"
-	BucketCouchbase    = "membase"
-	BucketMemcached    = "memcached"
-	BucketEphemeral    = "ephemeral"
-	PPools             = "/pools"
-	PRebalanceStop     = "/controller/stopRebalance"
-	PPoolsNodes        = "/pools/nodes"
-	PBuckets           = "/pools/default/buckets"
-	PFailover          = "/controller/failOver"
-	PEject             = "/controller/ejectNode"
-	PSetupServices     = "/node/controller/setupServices"
-	PPoolsDefault      = "/pools/default"
-	PSettingsWeb       = "/settings/web"
-	PRbacUsers         = "/settings/rbac/users/local"
-	PAddNode           = "/controller/addNode"
-	PNodesSelf         = "/nodes/self"
-	PRebalance         = "/controller/rebalance"
-	PRebalanceProgress = "/pools/default/rebalanceProgress"
-	PSettingsIndexes   = "/settings/indexes"
-	PN1ql              = "/query"
-	PFts               = "/api/index"
-	PRename            = "/node/controller/rename"
-	PDeveloperPreview  = "/settings/developerPreview"
-	PSampleBucket      = "/sampleBuckets/install"
+	RestRetry                = 60
+	RestTimeout              = 60 * time.Second
+	WaitTimeout              = 30 * time.Second
+	restInterval             = 3 * time.Second
+	SshPort                  = 22
+	RestPort                 = 8091
+	SecureRestPort           = 18091
+	N1qlPort                 = 8093
+	SecureN1qlPort           = 18093
+	FtsPort                  = 8094
+	SecureFtsPort            = 18094
+	SshUser                  = "root"
+	SshPass                  = "couchbase"
+	RestUser                 = "Administrator"
+	RestPass                 = "password"
+	BucketCouchbase          = "membase"
+	BucketMemcached          = "memcached"
+	BucketEphemeral          = "ephemeral"
+	PPools                   = "/pools"
+	PRebalanceStop           = "/controller/stopRebalance"
+	PPoolsNodes              = "/pools/nodes"
+	PBuckets                 = "/pools/default/buckets"
+	PFailover                = "/controller/failOver"
+	PEject                   = "/controller/ejectNode"
+	PSetupServices           = "/node/controller/setupServices"
+	PPoolsDefault            = "/pools/default"
+	PSettingsWeb             = "/settings/web"
+	PRbacUsers               = "/settings/rbac/users/local"
+	PAddNode                 = "/controller/addNode"
+	PNodesSelf               = "/nodes/self"
+	PRebalance               = "/controller/rebalance"
+	PRebalanceProgress       = "/pools/default/rebalanceProgress"
+	PSettingsIndexes         = "/settings/indexes"
+	PN1ql                    = "/query"
+	PFts                     = "/api/index"
+	PRename                  = "/node/controller/rename"
+	PDeveloperPreview        = "/settings/developerPreview"
+	PSampleBucket            = "/sampleBuckets/install"
+	PSetupNetConfig          = "/node/controller/setupNetConfig"
+	PDisableExternalListener = "/node/controller/disableExternalListener"
+	PEnableExternalListener  = "/node/controller/enableExternalListener"
+	PSecurity                = "/settings/security"
+	PInternalSettings        = "/internalSettings"
+	PAutoFailover            = "/settings/autoFailover"
 
 	Domain        = "/domain"
 	DomainPostfix = ".couchbase.com"
@@ -117,6 +128,7 @@ type Cred struct {
 	Hostname string
 	Port     int
 	Roles    *[]string
+	Secure   bool
 }
 
 type RestCall struct {
@@ -178,7 +190,19 @@ func GetResponse(params *RestCall) (string, error) {
 	header := params.Header
 
 	client := &http.Client{Timeout: RestTimeout}
-	url := fmt.Sprintf("http://%s:%d%s", login.Hostname, login.Port, path)
+
+	if login.Secure {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	protocol := "http"
+	if login.Secure {
+		protocol = "https"
+	}
+
+	url := fmt.Sprintf("%s://%s:%d%s", protocol, login.Hostname, login.Port, path)
 
 	req, err := http.NewRequest(method, url, strings.NewReader(postBody))
 	if err != nil {
@@ -244,4 +268,28 @@ func MatchingStrings(pattern string, str string) ([]string, error) {
 	}
 	return re.FindStringSubmatch(str), nil
 
+}
+
+func GetRestPort(secure bool) int {
+	if secure {
+		return SecureRestPort
+	} else {
+		return RestPort
+	}
+}
+
+func GetN1qlPort(secure bool) int {
+	if secure {
+		return SecureN1qlPort
+	} else {
+		return N1qlPort
+	}
+}
+
+func GetFtsPort(secure bool) int {
+	if secure {
+		return SecureFtsPort
+	} else {
+		return FtsPort
+	}
 }

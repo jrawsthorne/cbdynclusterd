@@ -99,9 +99,9 @@ func AddSampleBucket(ctx context.Context, s service.ClusterService, clusterID st
 
 	node := &Node{
 		HostName:  hostname,
-		Port:      strconv.Itoa(helper.RestPort),
+		Port:      strconv.Itoa(helper.GetRestPort(opts.UseSecure)),
 		SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
-		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.RestPort},
+		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.GetRestPort(opts.UseSecure), Secure: opts.UseSecure},
 	}
 
 	return node.LoadSample(opts.SampleBucket)
@@ -128,9 +128,9 @@ func AddBucket(ctx context.Context, s service.ClusterService, clusterID string, 
 
 	node := &Node{
 		HostName:  hostname,
-		Port:      strconv.Itoa(helper.RestPort),
+		Port:      strconv.Itoa(helper.GetRestPort(opts.UseSecure)),
 		SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
-		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.RestPort},
+		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.GetRestPort(opts.UseSecure), Secure: opts.UseSecure},
 		Version:   n.InitialServerVersion,
 	}
 
@@ -169,6 +169,30 @@ func SetupCertAuth(ctx context.Context, s service.ClusterService, clusterID stri
 	return setupCertAuth(opts.UserName, opts.UserEmail, nodes, clusterVersion, opts.NumRoots)
 }
 
+func SetupClusterEncryption(ctx context.Context, s service.ClusterService, clusterID string, opts service.SetupClusterEncryptionOptions) error {
+	c, err := s.GetCluster(ctx, clusterID)
+	if err != nil {
+		return err
+	}
+
+	initialNodes := c.Nodes
+	var nodes []Node
+	for i := 0; i < len(initialNodes); i++ {
+		ipv4 := initialNodes[i].IPv4Address
+		hostname := ipv4
+
+		nodeHost := Node{
+			HostName:  hostname,
+			Port:      strconv.Itoa(helper.GetRestPort(opts.UseSecure)),
+			SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
+			RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.GetRestPort(opts.UseSecure), Secure: opts.UseSecure},
+		}
+		nodes = append(nodes, nodeHost)
+	}
+
+	return setupClusterEncryption(nodes, opts)
+}
+
 func AddCollection(ctx context.Context, s service.ClusterService, clusterID string, opts service.AddCollectionOptions) error {
 	log.Printf("Adding collection %s to bucket %s on cluster %s (requested by: %s)", opts.Name,
 		opts.BucketName, clusterID, dyncontext.ContextUser(ctx))
@@ -191,9 +215,9 @@ func AddCollection(ctx context.Context, s service.ClusterService, clusterID stri
 
 	node := &Node{
 		HostName:  hostname,
-		Port:      strconv.Itoa(helper.RestPort),
+		Port:      strconv.Itoa(helper.GetRestPort(opts.UseSecure)),
 		SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
-		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.RestPort},
+		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.GetRestPort(opts.UseSecure), Secure: opts.UseSecure},
 	}
 
 	return node.CreateCollection(&cluster.Collection{

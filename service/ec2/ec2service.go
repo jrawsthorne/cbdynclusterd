@@ -410,6 +410,10 @@ func (s *EC2Service) SetupCertAuth(ctx context.Context, clusterID string, opts s
 	return nil, errors.New("not supported yet, requires SSH access")
 }
 
+func (s *EC2Service) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions) error {
+	return common.SetupClusterEncryption(ctx, s, clusterID, opts)
+}
+
 func (s *EC2Service) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions) error {
 	return common.AddBucket(ctx, s, clusterID, opts)
 }
