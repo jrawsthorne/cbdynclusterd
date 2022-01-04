@@ -219,6 +219,8 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 				Key:   aws.String("com.couchbase.dyncluster.node_name"),
 				Value: aws.String(opts[i].Name),
 			}},
+		}, func(options *ec2.Options) {
+			options.Retryer = retry.AddWithErrorCodes(options.Retryer, "InvalidInstanceID.NotFound")
 		})
 		if err != nil {
 			return nil, err
