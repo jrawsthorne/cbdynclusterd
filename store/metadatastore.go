@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/dgraph-io/badger"
 	"github.com/golang/glog"
-	"time"
 )
 
 type ClusterPlatform string
@@ -31,6 +32,7 @@ type ClusterMetaJSON struct {
 	Timeout        string `json:"timeout,omitempty"`
 	Platform       string `json:"platform,omitempty"`
 	CloudClusterID string `json:"cloudClusterID,omitempty"`
+	UseSecure      bool   `json:"useSecure,omitempty"`
 }
 
 type ClusterMeta struct {
@@ -38,6 +40,7 @@ type ClusterMeta struct {
 	Timeout        time.Time
 	Platform       ClusterPlatform
 	CloudClusterID string
+	UseSecure      bool
 }
 
 type MetaDataStore struct {
@@ -64,6 +67,7 @@ func (store *MetaDataStore) serializeMeta(meta ClusterMeta) ([]byte, error) {
 		Timeout:        meta.Timeout.Format(time.RFC3339),
 		Platform:       string(meta.Platform),
 		CloudClusterID: meta.CloudClusterID,
+		UseSecure:      meta.UseSecure,
 	}
 
 	metaBytes, err := json.Marshal(metaJSON)
@@ -91,6 +95,7 @@ func (store *MetaDataStore) deserializeMeta(bytes []byte) (ClusterMeta, error) {
 		Timeout:        parsedTimeout,
 		Platform:       ClusterPlatform(metaJSON.Platform),
 		CloudClusterID: metaJSON.CloudClusterID,
+		UseSecure:      metaJSON.UseSecure,
 	}, nil
 }
 

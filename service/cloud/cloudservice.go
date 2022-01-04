@@ -589,6 +589,13 @@ func (cs *CloudService) AddSampleBucket(ctx context.Context, clusterID string, o
 	return errors.New("unsupported operation")
 }
 
+func (cs *CloudService) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions) error {
+	if !cs.enabled {
+		return ErrCloudNotEnabled
+	}
+	return errors.New("unsupported operation")
+}
+
 func (cs *CloudService) ConnString(ctx context.Context, clusterID string, useSSL bool) (string, error) {
 	if !useSSL {
 		return "", errors.New("only SSL supported for cloud")
