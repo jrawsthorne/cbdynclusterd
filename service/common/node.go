@@ -332,12 +332,7 @@ func (n *Node) SetupMemoryQuota(memoryQuota int) error {
 	return err
 }
 
-func (n *Node) SetAutoFailover(enable bool) error {
-	enableStr := "false"
-	if enable {
-		enableStr = "true"
-	}
-	body := fmt.Sprintf("enabled=%s", enableStr)
+func (n *Node) setAutoFailover(body string) error {
 	restParam := &helper.RestCall{
 		ExpectedCode: 200,
 		RetryOnCode:  400,
@@ -352,7 +347,17 @@ func (n *Node) SetAutoFailover(enable bool) error {
 	return err
 }
 
-func (n *Node) IsAutoFailoverEnabled() (bool, error) {
+func (n *Node) EnableAutoFailover(timeout int) error {
+	body := fmt.Sprintf("enabled=true&timeout=%d", timeout)
+	return n.setAutoFailover(body)
+}
+
+func (n *Node) DisableAutoFailover() error {
+	body := "enabled=false"
+	return n.setAutoFailover(body)
+}
+
+func (n *Node) IsAutoFailoverEnabled() (bool, int, error) {
 	parsed := make(map[string]interface{})
 	restParam := &helper.RestCall{
 		ExpectedCode: 200,
@@ -362,9 +367,11 @@ func (n *Node) IsAutoFailoverEnabled() (bool, error) {
 	}
 	resp, err := helper.RestRetryer(20, restParam, helper.GetResponse)
 	if err = json.Unmarshal([]byte(resp), &parsed); err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return parsed["enabled"].(bool), nil
+	enabled := parsed["enabled"].(bool)
+	timeout := int(parsed["timeout"].(float64))
+	return enabled, timeout, nil
 }
 
 func (n *Node) SetupInitialService() error {
