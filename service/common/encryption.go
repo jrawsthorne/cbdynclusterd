@@ -7,14 +7,14 @@ import (
 func setupClusterEncryption(nodes []Node, opts service.SetupClusterEncryptionOptions) error {
 	epnode := nodes[0]
 
-	autoFailoverEnabled, err := epnode.IsAutoFailoverEnabled()
+	autoFailoverEnabled, autoFailoverTimeout, err := epnode.IsAutoFailoverEnabled()
 	if err != nil {
 		return err
 	}
 
 	// disable auto failover, you can't enable node to node encryption with it enabled
 	if autoFailoverEnabled {
-		if err = epnode.SetAutoFailover(false); err != nil {
+		if err = epnode.DisableAutoFailover(); err != nil {
 			return err
 		}
 	}
@@ -59,7 +59,7 @@ func setupClusterEncryption(nodes []Node, opts service.SetupClusterEncryptionOpt
 
 	// enable auto failover again if it was originally enabled
 	if autoFailoverEnabled {
-		if err = epnode.SetAutoFailover(true); err != nil {
+		if err = epnode.EnableAutoFailover(autoFailoverTimeout); err != nil {
 			return err
 		}
 	}
