@@ -97,7 +97,7 @@ func (ds *DockerService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster
 
 			nodes = append(nodes, &cluster.Node{
 				ContainerID:          container.ID[0:12],
-				ContainerName:        container.Names[0],
+				ContainerName:        container.Names[0][1:], // remove the / from the beginning
 				State:                container.State,
 				Name:                 container.Labels["com.couchbase.dyncluster.node_name"],
 				InitialServerVersion: container.Labels["com.couchbase.dyncluster.initial_server_version"],
