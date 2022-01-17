@@ -113,6 +113,10 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 				Name:   aws.String("name"),
 				Values: []string{(imageName)},
 			},
+			{
+				Name:   aws.String("state"),
+				Values: []string{"available"},
+			},
 		},
 	})
 
