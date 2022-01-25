@@ -859,20 +859,28 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 
 	var nodes []cloud.NodeSetupOptions
 	for k, s := range services {
+		servicesStr := strings.Split(k, ",")
+		services := []cloud.V3CouchbaseService{}
+		for _, serviceStr := range servicesStr {
+			service, err := cloud.ParseServiceName(serviceStr)
+			if err != nil {
+				writeJSONError(w, err)
+				return
+			}
+			services = append(services, service)
+		}
 		nodes = append(nodes, cloud.NodeSetupOptions{
-			Services: strings.Split(k, ","),
+			Services: services,
 			Size:     s,
 		})
 	}
 
 	clusterID := helper.NewRandomClusterID()
 	clusterOpts := cloud.ClusterSetupOptions{
-		Nodes:  nodes,
-		Bucket: reqData.Bucket,
-		User:   reqData.User,
+		Nodes: nodes,
 	}
 
-	cloudClusterID, err := d.cloudService.SetupCluster(reqCtx, clusterID, reqData.IP, clusterOpts, helper.RestTimeout)
+	cloudClusterID, err := d.cloudService.SetupCluster(reqCtx, clusterID, clusterOpts, helper.RestTimeout)
 	if err != nil {
 		writeJSONError(w, err)
 		return

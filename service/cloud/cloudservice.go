@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
+	"net"
 	"strings"
 	"time"
 
@@ -18,18 +20,16 @@ import (
 )
 
 type CloudService struct {
-	cloudID   string
 	projectID string
 	enabled   bool
 	client    *client
 	metaStore *store.ReadOnlyMetaDataStore
 }
 
-func NewCloudService(accessKey, privateKey, cloudID, projectID, baseURL string, metaStore *store.ReadOnlyMetaDataStore) *CloudService {
-	log.Printf("Cloud enabled: %t", cloudID != "")
+func NewCloudService(accessKey, privateKey, projectID, baseURL string, metaStore *store.ReadOnlyMetaDataStore) *CloudService {
+	log.Printf("Cloud enabled: %t", projectID != "")
 	return &CloudService{
-		enabled:   cloudID != "",
-		cloudID:   cloudID,
+		enabled:   projectID != "",
 		projectID: projectID,
 		client:    NewClient(baseURL, accessKey, privateKey),
 		metaStore: metaStore,
@@ -64,52 +64,54 @@ func (cs *CloudService) getCluster(ctx context.Context, cloudClusterID string) (
 }
 
 func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID string, opts service.AddBucketOptions) error {
-	log.Printf("Running cloud CreateBucket for %s: %s", clusterID, cloudClusterID)
+	return errors.New("unsupported operation")
+	// log.Printf("Running cloud CreateBucket for %s: %s", clusterID, cloudClusterID)
 
-	body := bucketSpecJSON{
-		Name:        opts.Name,
-		MemoryQuota: opts.RamQuota,
-		Replicas:    opts.ReplicaCount,
-	}
+	// body := bucketSpecJSON{
+	// 	Name:        opts.Name,
+	// 	MemoryQuota: opts.RamQuota,
+	// 	Replicas:    opts.ReplicaCount,
+	// }
 
-	res, err := cs.client.Do(ctx, "POST", fmt.Sprintf(createBucketPath, cloudClusterID), body)
-	if err != nil {
-		return err
-	}
+	// res, err := cs.client.Do(ctx, "POST", fmt.Sprintf(createBucketPath, cloudClusterID), body)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		bb, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return fmt.Errorf("create bucket failed: reason could not be determined: %v", err)
-		}
-		return fmt.Errorf("create bucket failed: %s", string(bb))
-	}
+	// if res.StatusCode < 200 || res.StatusCode >= 300 {
+	// 	bb, err := ioutil.ReadAll(res.Body)
+	// 	if err != nil {
+	// 		return fmt.Errorf("create bucket failed: reason could not be determined: %v", err)
+	// 	}
+	// 	return fmt.Errorf("create bucket failed: %s", string(bb))
+	// }
 
-	return nil
+	// return nil
 }
 
 func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip string) error {
-	log.Printf("Running cloud AddIP for %s: %s", clusterID, cloudClusterID)
+	return errors.New("unsupported operation")
+	// log.Printf("Running cloud AddIP for %s: %s", clusterID, cloudClusterID)
 
-	body := allowListJSON{
-		CIDR:     ip,
-		RuleType: "permanent",
-	}
+	// body := allowListJSON{
+	// 	CIDR:     ip,
+	// 	RuleType: "permanent",
+	// }
 
-	res, err := cs.client.Do(ctx, "POST", fmt.Sprintf(addIPPath, cloudClusterID), body)
-	if err != nil {
-		return err
-	}
+	// res, err := cs.client.Do(ctx, "POST", fmt.Sprintf(addIPPath, cloudClusterID), body)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		bb, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return fmt.Errorf("add ip failed: reason could not be determined: %v", err)
-		}
-		return fmt.Errorf("add ip failed: %s", string(bb))
-	}
+	// if res.StatusCode < 200 || res.StatusCode >= 300 {
+	// 	bb, err := ioutil.ReadAll(res.Body)
+	// 	if err != nil {
+	// 		return fmt.Errorf("add ip failed: reason could not be determined: %v", err)
+	// 	}
+	// 	return fmt.Errorf("add ip failed: %s", string(bb))
+	// }
 
-	return nil
+	// return nil
 }
 
 func (cs *CloudService) killCluster(ctx context.Context, clusterID, cloudClusterID string) error {
@@ -160,24 +162,25 @@ func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID, 
 }
 
 func (cs *CloudService) deleteDefaultCloudBucket(ctx context.Context, clusterID, cloudClusterID string) error {
-	log.Printf("Running cloud delete couchbasecloudbucket bucket for %s: %s", clusterID, cloudClusterID)
+	return errors.New("unsupported operation")
+	// log.Printf("Running cloud delete couchbasecloudbucket bucket for %s: %s", clusterID, cloudClusterID)
 
-	res, err := cs.client.Do(ctx, "DELETE", fmt.Sprintf(deleteBucketPath, cloudClusterID), bucketDeleteJSON{
-		Name: "couchbasecloudbucket",
-	})
-	if err != nil {
-		return err
-	}
+	// res, err := cs.client.Do(ctx, "DELETE", fmt.Sprintf(deleteBucketPath, cloudClusterID), bucketDeleteJSON{
+	// 	Name: "couchbasecloudbucket",
+	// })
+	// if err != nil {
+	// 	return err
+	// }
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		bb, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return fmt.Errorf("delete bucket failed: reason could not be determined: %v", err)
-		}
-		return fmt.Errorf("delete bucket failed: %s", string(bb))
-	}
+	// if res.StatusCode < 200 || res.StatusCode >= 300 {
+	// 	bb, err := ioutil.ReadAll(res.Body)
+	// 	if err != nil {
+	// 		return fmt.Errorf("delete bucket failed: reason could not be determined: %v", err)
+	// 	}
+	// 	return fmt.Errorf("delete bucket failed: %s", string(bb))
+	// }
 
-	return nil
+	// return nil
 }
 
 func (cs *CloudService) bucketHealth(ctx context.Context, clusterID, cloudClusterID, bucket string) (string, error) {
@@ -237,13 +240,19 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 		return nil, err
 	}
 
+	_, addrs, err := net.LookupSRV("couchbases", "tcp", c.EndpointsSRV)
+
+	if err != nil {
+		return nil, err
+	}
+
 	var nodes []*cluster.Node
-	for i := 0; i < len(c.EndpointsURL); i++ {
+	for i, addr := range addrs {
 		nodes = append(nodes, &cluster.Node{
-			ContainerID:          c.ProjectID,
+			ContainerID:          c.ID,
 			Name:                 fmt.Sprintf("node_%d", i),
 			InitialServerVersion: c.Version.Name,
-			IPv4Address:          c.EndpointsURL[i],
+			IPv4Address:          addr.Target[:len(addr.Target)-1],
 		})
 	}
 
@@ -308,7 +317,8 @@ func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster,
 
 	log.Printf("Running cloud GetAllClusters")
 
-	res, err := cs.client.Do(ctx, "GET", getAllClustersPath, nil)
+	// TODO: Implement pagination
+	res, err := cs.client.Do(ctx, "GET", getAllClustersPath+fmt.Sprintf("?perPage=1000&projectId=%s", cs.projectID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -332,20 +342,18 @@ func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster,
 	}
 
 	var clusters []*cluster.Cluster
-	for _, d := range respBody.Data {
-		if d.Status != clusterDeploying {
-			c, err := cs.GetCluster(ctx, d.Name)
-			if err != nil {
-				log.Printf("Failed to get cluster: %s: %v", d.Name, err)
-				continue
-			}
-
-			if !dyncontext.ContextIgnoreOwnership(ctx) && c.Owner != dyncontext.ContextUser(ctx) {
-				continue
-			}
-
-			clusters = append(clusters, c)
+	for _, d := range respBody.Data.Items {
+		c, err := cs.GetCluster(ctx, d.Name)
+		if err != nil {
+			log.Printf("Failed to get cluster: %s: %v", d.Name, err)
+			continue
 		}
+
+		if !dyncontext.ContextIgnoreOwnership(ctx) && c.Owner != dyncontext.ContextUser(ctx) {
+			continue
+		}
+
+		clusters = append(clusters, c)
 	}
 
 	return clusters, nil
@@ -415,11 +423,17 @@ func newDatabaseUser(username, password string) databaseUserJSON {
 	return databaseUserJSON{
 		Username:         username,
 		Password:         password,
-		AllBucketsAccess: []string{"data_writer", "data_reader"},
+		AllBucketsAccess: V3BucketRoleDataWriter,
 	}
 }
 
-func (cs *CloudService) SetupCluster(ctx context.Context, clusterID, ip string, opts ClusterSetupOptions,
+func generateCIDR() string {
+	first := rand.Int() % 256
+	second := (rand.Int() % 16) * 16
+	return fmt.Sprintf("10.%d.%d.0/20", first, second)
+}
+
+func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts ClusterSetupOptions,
 	maxRequestTimeout time.Duration) (string, error) {
 	if !cs.enabled {
 		return "", ErrCloudNotEnabled
@@ -427,22 +441,30 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID, ip string, 
 
 	log.Printf("Running SetupCluster for %s with %v", clusterID, opts.Nodes)
 
-	var servers []nodeJson
+	var servers []V3Server
 	for _, node := range opts.Nodes {
-		servers = append(servers, nodeJson{
-			Services: node.Services,
+		servers = append(servers, V3Server{
 			Size:     node.Size,
-			AWS:      defaultAWS,
+			Compute:  defaultCompute,
+			Services: node.Services,
+			Storage:  defaultStorage,
 		})
 	}
 
 	body := setupClusterJson{
-		Name:           clusterID,
-		CloudID:        cs.cloudID,
-		ProjectID:      cs.projectID,
+		Environment: V3EnvironmentHosted,
+		Name:        clusterID,
+		ProjectID:   cs.projectID,
+		Place: V3Place{
+			SingleAZ: true,
+			Hosted: V3PlaceHosted{
+				Provider: V3ProviderAWS,
+				Region:   defaultRegion,
+				CIDR:     generateCIDR(),
+			},
+		},
 		Servers:        servers,
 		SupportPackage: defaultSupportPackage,
-		Version:        opts.Version,
 	}
 
 	reqCtx, cancel := context.WithDeadline(ctx, time.Now().Add(maxRequestTimeout))
@@ -457,6 +479,12 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID, ip string, 
 		bb, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return "", fmt.Errorf("create cluster failed: reason could not be determined: %v", err)
+		}
+		errorBody := string(bb)
+		// retry if the CIDR is already in use
+		// TODO: Is there a way we can prevent this?
+		if strings.Contains(errorBody, "ErrClusterInvalidCIDRNotUnique") {
+			return cs.SetupCluster(ctx, clusterID, opts, maxRequestTimeout)
 		}
 		return "", fmt.Errorf("create cluster failed: %d: %s", res.StatusCode, string(bb))
 	}
@@ -480,71 +508,18 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID, ip string, 
 			return "", err
 		}
 
-		if c.Status == clusterReady {
+		if c.Status == clusterHealthy {
 			break
+		}
+
+		if c.Status == clusterDeploymentFailed {
+			return "", errors.New("create cluster failed: status is deploymentFailed")
 		}
 
 		time.Sleep(5 * time.Second)
 	}
 
-	err = cs.addIP(ctx, clusterID, location, ip)
-	if err != nil {
-		go func() {
-			cs.killCluster(ctx, clusterID, location)
-		}()
-		return "", err
-	}
-
-	// We don't actually really care if this fails
-	cs.deleteDefaultCloudBucket(ctx, clusterID, location)
-
-	if opts.Bucket != "" {
-		bucketOpts := service.AddBucketOptions{
-			Name:         opts.Bucket,
-			RamQuota:     256,
-			ReplicaCount: 1,
-		}
-		err = cs.addBucket(ctx, clusterID, location, bucketOpts)
-		if err != nil {
-			go func() {
-				cs.killCluster(ctx, clusterID, location)
-			}()
-			return "", err
-		}
-	}
-
-	bCtx, cancel := context.WithDeadline(ctx, time.Now().Add(5*time.Minute))
-	defer cancel()
-	var bucketHealth string
-	for {
-		getReqCtx, cancel := context.WithDeadline(bCtx, time.Now().Add(maxRequestTimeout))
-		bucketHealth, err = cs.bucketHealth(getReqCtx, clusterID, location, opts.Bucket)
-		cancel()
-		if err != nil {
-			log.Printf("Bucket health failed: %v", err)
-		}
-
-		if bucketHealth == "healthy" {
-			break
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-	if bucketHealth != "healthy" {
-		go func() {
-			cs.killCluster(ctx, clusterID, location)
-		}()
-		return "", errors.New("bucket never became healthy")
-	}
-
-	err = cs.addUser(ctx, clusterID, location, opts.Bucket, opts.User)
-	if err != nil {
-		go func() {
-			cs.killCluster(ctx, clusterID, location)
-		}()
-		return "", err
-	}
+	// TODO: Return root certificate when API is supported so we can securely connect to the cluster
 
 	return location, nil
 }
@@ -553,19 +528,19 @@ func (cs *CloudService) AddBucket(ctx context.Context, clusterID string, opts se
 	if !cs.enabled {
 		return ErrCloudNotEnabled
 	}
+	return errors.New("unsupported operation")
+	// meta, err := cs.metaStore.GetClusterMeta(clusterID)
+	// if err != nil {
+	// 	log.Printf("Encountered unregistered cluster: %s", clusterID)
+	// 	return err
+	// }
 
-	meta, err := cs.metaStore.GetClusterMeta(clusterID)
-	if err != nil {
-		log.Printf("Encountered unregistered cluster: %s", clusterID)
-		return err
-	}
+	// if meta.CloudClusterID == "" {
+	// 	log.Printf("Encountered cluster with no cloud cluster ID: %s", clusterID)
+	// 	return errors.New("unknown cluster")
+	// }
 
-	if meta.CloudClusterID == "" {
-		log.Printf("Encountered cluster with no cloud cluster ID: %s", clusterID)
-		return errors.New("unknown cluster")
-	}
-
-	return cs.addBucket(ctx, clusterID, meta.CloudClusterID, opts)
+	// return cs.addBucket(ctx, clusterID, meta.CloudClusterID, opts)
 }
 
 func (cs *CloudService) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions) error {
