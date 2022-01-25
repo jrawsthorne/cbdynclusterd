@@ -250,11 +250,8 @@ type BuildImageResponseJSON struct {
 }
 
 type CreateCloudClusterJSON struct {
-	Timeout  string             `json:"timeout"`
-	Services []string           `json:"services"`
-	User     *helper.UserOption `json:"user"`
-	IP       string             `json:"ip"`
-	Bucket   string             `json:"bucket"`
+	Timeout  string   `json:"timeout"`
+	Services []string `json:"services"`
 }
 
 type AddIPJSON struct {

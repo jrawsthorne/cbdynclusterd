@@ -43,7 +43,6 @@ var (
 	cloudAccessKey      = ""
 	cloudPrivateKey     = ""
 	cloudURL            = "https://cloudapi.cloud.couchbase.com"
-	cloudID             = ""
 	cloudProjectID      = ""
 	ec2SecurityGroup    = ""
 	ec2KeyName          = ""
@@ -51,7 +50,7 @@ var (
 
 	cfgFileFlag string
 	dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag, cloudAccessKeyFlag, cloudPrivateKeyFlag,
-	cloudIDFlag, cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag string
+	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag string
 	dockerPortFlag int32
 )
 
@@ -84,7 +83,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&aliasRepoPathFlag, "alias-repo", aliasRepoPath, "Path to the alias repo")
 	rootCmd.PersistentFlags().StringVar(&cloudAccessKeyFlag, "cloud-access-key", "", "Access key to use for cloud requests")
 	rootCmd.PersistentFlags().StringVar(&cloudPrivateKeyFlag, "cloud-private-key", "", "Private key to use for cloud requests")
-	rootCmd.PersistentFlags().StringVar(&cloudIDFlag, "cloud-id", "", "Cloud ID use for cloud")
 	rootCmd.PersistentFlags().StringVar(&cloudProjectIDFlag, "cloud-project-id", "", "Project ID to use for cloud")
 	rootCmd.PersistentFlags().StringVar(&ec2KeyNameFlag, "ec2-key-name", "", "SSH key name to use when creating ec2 instances")
 	rootCmd.PersistentFlags().StringVar(&ec2SecurityGroupFlag, "ec2-security-group", "", "Security group to use when creating ec2 instances")
@@ -144,8 +142,7 @@ func initConfig() {
 	aliasRepoPathFlag = getStringArg("alias-repo")
 	cloudAccessKeyFlag = getStringArg("cloud-access-key")
 	cloudPrivateKeyFlag = getStringArg("cloud-private-key")
-	cloudIDFlag = getStringArg("cloud-id")
-	cloudProjectID = getStringArg("cloud-project-id")
+	cloudProjectIDFlag = getStringArg("cloud-project-id")
 	ec2SecurityGroupFlag = getStringArg("ec2-security-group")
 	ec2KeyNameFlag = getStringArg("ec2-key-name")
 	ec2DownloadPasswordFlag = getStringArg("ec2-download-password")
@@ -156,7 +153,6 @@ func initConfig() {
 	aliasRepoPath = aliasRepoPathFlag
 	cloudAccessKey = cloudAccessKeyFlag
 	cloudPrivateKey = cloudPrivateKeyFlag
-	cloudID = cloudIDFlag
 	cloudProjectID = cloudProjectIDFlag
 	ec2SecurityGroup = ec2SecurityGroupFlag
 	ec2KeyName = ec2KeyNameFlag
@@ -342,7 +338,7 @@ func newDaemon() *daemon {
 
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
 	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, readOnlyStore)
-	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudID, cloudProjectID, cloudURL, readOnlyStore)
+	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudProjectID, cloudURL, readOnlyStore)
 	d.ec2Service = ec2.NewEC2Service(aliasRepoPath, ec2SecurityGroup, ec2KeyName, ec2DownloadPassword, readOnlyStore)
 
 	// Create a system context to use for system actions (like cleanups)
