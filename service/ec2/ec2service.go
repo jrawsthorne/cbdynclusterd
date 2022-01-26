@@ -193,6 +193,9 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 				}, {
 					Key:   aws.String("com.couchbase.dyncluster.initial_server_version"),
 					Value: aws.String(options.ServerVersion),
+				}, {
+					Key:   aws.String("Owner"),
+					Value: aws.String("SDK"),
 				}},
 			},
 		},
