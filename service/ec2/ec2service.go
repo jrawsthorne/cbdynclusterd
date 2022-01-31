@@ -143,6 +143,65 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 	return err
 }
 
+func (s *EC2Service) runInstances(ctx context.Context, clusterID, serverVersion string, ami *string, instanceCount int, instanceType types.InstanceType) ([]string, error) {
+	useSpotMarket := true
+
+	for {
+		input := &ec2.RunInstancesInput{
+			MaxCount:         aws.Int32(int32(instanceCount)),
+			MinCount:         aws.Int32(int32(instanceCount)),
+			ImageId:          ami,
+			InstanceType:     instanceType,
+			KeyName:          aws.String(s.keyName),
+			SecurityGroupIds: []string{*aws.String(s.securityGroup)},
+			TagSpecifications: []types.TagSpecification{
+				{
+					ResourceType: "instance",
+					Tags: []types.Tag{{
+						Key:   aws.String("com.couchbase.dyncluster.cluster_id"),
+						Value: aws.String(clusterID),
+					}, {
+						Key:   aws.String("com.couchbase.dyncluster.creator"),
+						Value: aws.String(dyncontext.ContextUser(ctx)),
+					}, {
+						Key:   aws.String("com.couchbase.dyncluster.initial_server_version"),
+						Value: aws.String(serverVersion),
+					}, {
+						Key:   aws.String("Owner"),
+						Value: aws.String("SDK"),
+					}},
+				},
+			},
+		}
+
+		if useSpotMarket {
+			input.InstanceMarketOptions = &types.InstanceMarketOptionsRequest{
+				MarketType: types.MarketTypeSpot,
+			}
+		}
+
+		createdInstances, err := s.client.RunInstances(ctx, input)
+
+		if err != nil {
+			// the error could be because of insufficient spot capacity so
+			// try requesting on demand instances
+			if useSpotMarket {
+				useSpotMarket = false
+				continue
+			} else {
+				return nil, err
+			}
+		}
+
+		instanceIds := make([]string, 0, instanceCount)
+		for _, instance := range createdInstances.Instances {
+			instanceIds = append(instanceIds, *instance.InstanceId)
+		}
+
+		return instanceIds, nil
+	}
+}
+
 func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts []common.NodeOptions) ([]string, error) {
 	log.Printf("Allocating nodes for cluster %s (requested by: %s)", clusterID, dyncontext.ContextUser(ctx))
 
@@ -169,45 +228,17 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 	}
 
 	ami := out.Images[0].ImageId
-	instanceType := types.InstanceTypeM4Xlarge
+	instanceType := types.InstanceTypeM5Xlarge
 	if options.VersionInfo.Arch == "aarch64" {
 		instanceType = types.InstanceTypeT4gXlarge
 	}
 
-	createdInstances, err := s.client.RunInstances(ctx, &ec2.RunInstancesInput{
-		MaxCount:         aws.Int32(int32(instanceCount)),
-		MinCount:         aws.Int32(int32(instanceCount)),
-		ImageId:          ami,
-		InstanceType:     instanceType,
-		KeyName:          aws.String(s.keyName),
-		SecurityGroupIds: []string{*aws.String(s.securityGroup)},
-		TagSpecifications: []types.TagSpecification{
-			{
-				ResourceType: "instance",
-				Tags: []types.Tag{{
-					Key:   aws.String("com.couchbase.dyncluster.cluster_id"),
-					Value: aws.String(clusterID),
-				}, {
-					Key:   aws.String("com.couchbase.dyncluster.creator"),
-					Value: aws.String(dyncontext.ContextUser(ctx)),
-				}, {
-					Key:   aws.String("com.couchbase.dyncluster.initial_server_version"),
-					Value: aws.String(options.ServerVersion),
-				}, {
-					Key:   aws.String("Owner"),
-					Value: aws.String("SDK"),
-				}},
-			},
-		},
-	})
+	var instanceIds []string
+
+	instanceIds, err = s.runInstances(ctx, clusterID, options.ServerVersion, ami, instanceCount, instanceType)
 
 	if err != nil {
 		return nil, err
-	}
-
-	instanceIds := make([]string, 0, instanceCount)
-	for _, instance := range createdInstances.Instances {
-		instanceIds = append(instanceIds, *instance.InstanceId)
 	}
 
 	if len(instanceIds) != instanceCount {
