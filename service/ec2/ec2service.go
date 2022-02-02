@@ -228,9 +228,9 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 	}
 
 	ami := out.Images[0].ImageId
-	instanceType := types.InstanceTypeM5Xlarge
+	instanceType := types.InstanceTypeM5Large
 	if options.VersionInfo.Arch == "aarch64" {
-		instanceType = types.InstanceTypeT4gXlarge
+		instanceType = types.InstanceTypeT4gLarge
 	}
 
 	var instanceIds []string
