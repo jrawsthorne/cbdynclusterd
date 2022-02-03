@@ -299,6 +299,7 @@ func (n *Node) Rename(hostname string) error {
 		Cred:         n.RestLogin,
 		Body:         body,
 		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+		RetryOnCode:  400,
 	}
 	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 	if err == nil {
