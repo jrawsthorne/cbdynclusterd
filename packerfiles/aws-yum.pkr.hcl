@@ -42,7 +42,19 @@ variable "source_ami_filter" {
   type = string
 }
 
-source "amazon-ebs" "amzn2" {
+variable "ssh_username" {
+  type = string
+}
+
+variable "ami_owner" {
+  type = string
+}
+
+variable "device_name" {
+  type = string
+}
+
+source "amazon-ebs" "yum" {
   ami_name      = var.ami_name
   instance_type = var.arch == "aarch64" ? "t4g.micro" : "t2.micro"
   source_ami_filter {
@@ -52,13 +64,13 @@ source "amazon-ebs" "amzn2" {
       virtualization-type = "hvm"
     }
     most_recent = true
-    owners      = ["amazon"]
+    owners      = [var.ami_owner]
   }
-  ssh_username          = "ec2-user"
+  ssh_username          = var.ssh_username
   force_deregister      = true
   force_delete_snapshot = true
   launch_block_device_mappings {
-    device_name           = "/dev/xvda"
+    device_name           = var.device_name
     volume_size           = 40
     volume_type           = "gp3"
     delete_on_termination = true
@@ -70,14 +82,14 @@ source "amazon-ebs" "amzn2" {
 
 build {
   sources = [
-    "source.amazon-ebs.amzn2"
+    "source.amazon-ebs.yum"
   ]
   provisioner "shell" {
     inline = [
       "curl -u ${var.download_username}:${var.download_password} -o ${var.build_pkg} -s ${local.build_url}",
       "sudo yum install -y ${var.build_pkg}",
       "rm ${var.build_pkg}",
-      "sudo usermod -a -G couchbase ec2-user"
+      "sudo usermod -a -G couchbase ${var.ssh_username}"
     ]
   }
 }
