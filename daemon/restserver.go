@@ -143,6 +143,7 @@ func (d *daemon) HttpCreateCluster(w http.ResponseWriter, r *http.Request) {
 		Owner:    dyncontext.ContextUser(reqCtx),
 		Timeout:  clusterOpts.Deadline,
 		Platform: store.ClusterPlatform(platform),
+		OS:       reqData.Nodes[0].OS,
 	}
 	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
 		writeJSONError(w, err)

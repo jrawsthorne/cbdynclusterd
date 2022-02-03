@@ -31,10 +31,11 @@ type EC2Service struct {
 	aliasRepoPath    string
 	securityGroup    string
 	keyName          string
+	keyPath          string
 	downloadPassword string
 }
 
-func NewEC2Service(aliasRepoPath, securityGroup, keyName, downloadPassword string, metaStore *store.ReadOnlyMetaDataStore) *EC2Service {
+func NewEC2Service(aliasRepoPath, securityGroup, keyName, keyPath, downloadPassword string, metaStore *store.ReadOnlyMetaDataStore) *EC2Service {
 	enabled := true
 	client := &ec2.Client{}
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRetryer(func() aws.Retryer {
@@ -53,6 +54,7 @@ func NewEC2Service(aliasRepoPath, securityGroup, keyName, downloadPassword strin
 		client:           client,
 		aliasRepoPath:    aliasRepoPath,
 		keyName:          keyName,
+		keyPath:          keyPath,
 		securityGroup:    securityGroup,
 		downloadPassword: downloadPassword,
 	}
@@ -445,7 +447,16 @@ func (s *EC2Service) AddCollection(ctx context.Context, clusterID string, opts s
 }
 
 func (s *EC2Service) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions) (*service.CertAuthResult, error) {
-	return nil, errors.New("not supported yet, requires SSH access")
+	meta, err := s.metaStore.GetClusterMeta(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	if meta.OS == "" {
+		return nil, errors.New("cluster does not have an OS specified")
+	}
+	opts.SSHKeyPath = s.keyPath
+	opts.SSHUsername = osToSSHUsername[meta.OS]
+	return common.SetupCertAuth(ctx, s, clusterID, opts)
 }
 
 func (s *EC2Service) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions) error {

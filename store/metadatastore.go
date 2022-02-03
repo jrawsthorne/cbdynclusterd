@@ -33,6 +33,7 @@ type ClusterMetaJSON struct {
 	Platform       string `json:"platform,omitempty"`
 	CloudClusterID string `json:"cloudClusterID,omitempty"`
 	UseSecure      bool   `json:"useSecure,omitempty"`
+	OS             string `json:"os,omitempty"`
 }
 
 type ClusterMeta struct {
@@ -41,6 +42,7 @@ type ClusterMeta struct {
 	Platform       ClusterPlatform
 	CloudClusterID string
 	UseSecure      bool
+	OS             string
 }
 
 type MetaDataStore struct {
@@ -68,6 +70,7 @@ func (store *MetaDataStore) serializeMeta(meta ClusterMeta) ([]byte, error) {
 		Platform:       string(meta.Platform),
 		CloudClusterID: meta.CloudClusterID,
 		UseSecure:      meta.UseSecure,
+		OS:             meta.OS,
 	}
 
 	metaBytes, err := json.Marshal(metaJSON)
@@ -96,6 +99,7 @@ func (store *MetaDataStore) deserializeMeta(bytes []byte) (ClusterMeta, error) {
 		Platform:       ClusterPlatform(metaJSON.Platform),
 		CloudClusterID: metaJSON.CloudClusterID,
 		UseSecure:      metaJSON.UseSecure,
+		OS:             metaJSON.OS,
 	}, nil
 }
 
