@@ -89,7 +89,8 @@ build {
       "curl -u ${var.download_username}:${var.download_password} -o ${var.build_pkg} -s ${local.build_url}",
       "sudo yum install -y ${var.build_pkg}",
       "rm ${var.build_pkg}",
-      "sudo usermod -a -G couchbase ${var.ssh_username}"
+      "sudo usermod -a -G couchbase ${var.ssh_username}",
+      "sudo chmod 770 /opt/couchbase/var/lib/couchbase"
     ]
   }
 }
