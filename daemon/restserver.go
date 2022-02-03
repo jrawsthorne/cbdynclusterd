@@ -286,7 +286,7 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 	epnode, err := common.SetupCluster(common.ClusterSetupOptions{
 		Nodes:               c.Nodes,
 		Services:            reqData.Services,
-		UseHostname:         reqData.UseHostname,
+		UseHostname:         reqData.UseHostname || meta.Platform == store.ClusterPlatformEC2,
 		UseIpv6:             reqData.UseIpv6,
 		MemoryQuota:         strconv.Itoa(reqData.RamQuota),
 		User:                reqData.User,
