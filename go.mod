@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.10.0
 	github.com/aws/aws-sdk-go-v2/config v1.9.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.20.0
-	github.com/couchbaselabs/cbcerthelper v0.0.0-20211020105104-0915e6a9c3f2
+	github.com/couchbaselabs/cbcerthelper v0.0.0-20220203115212-3b5fe2d4c5e2
 	github.com/dgraph-io/badger v1.6.0
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.13.1

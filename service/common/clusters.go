@@ -156,11 +156,14 @@ func SetupCertAuth(ctx context.Context, s service.ClusterService, clusterID stri
 	for i := 0; i < len(initialNodes); i++ {
 		ipv4 := initialNodes[i].IPv4Address
 		hostname := ipv4
-
+		sshUsername := helper.SshUser
+		if opts.SSHUsername != "" {
+			sshUsername = opts.SSHUsername
+		}
 		nodeHost := Node{
 			HostName:  hostname,
 			Port:      strconv.Itoa(helper.RestPort),
-			SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort},
+			SshLogin:  &helper.Cred{Username: sshUsername, Password: helper.SshPass, Hostname: ipv4, Port: helper.SshPort, KeyPath: opts.SSHKeyPath},
 			RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: ipv4, Port: helper.RestPort},
 		}
 		nodes = append(nodes, nodeHost)

@@ -9,9 +9,11 @@ type AddCollectionOptions struct {
 }
 
 type SetupClientCertAuthOptions struct {
-	UserName  string
-	UserEmail string
-	NumRoots  int
+	UserName    string
+	UserEmail   string
+	NumRoots    int
+	SSHKeyPath  string
+	SSHUsername string
 }
 
 type AddBucketOptions struct {
