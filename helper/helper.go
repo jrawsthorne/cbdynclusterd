@@ -129,6 +129,7 @@ type Cred struct {
 	Port     int
 	Roles    *[]string
 	Secure   bool
+	KeyPath  string
 }
 
 type RestCall struct {

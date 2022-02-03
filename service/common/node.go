@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -1180,11 +1181,26 @@ func (n *Node) ScpToLocalDir(src, dest string) error {
 
 func newClient(sshLogin *helper.Cred) (*ssh.Client, error) {
 	sshConfig := &ssh.ClientConfig{
-		User: sshLogin.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(sshLogin.Password),
-		},
+		User:            sshLogin.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	if sshLogin.KeyPath == "" {
+		sshConfig.Auth = []ssh.AuthMethod{
+			ssh.Password(sshLogin.Password),
+		}
+	} else {
+		key, err := ioutil.ReadFile(sshLogin.KeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("Reading private key file failed %v", err)
+		}
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("Parsing private key file failed %v", err)
+		}
+		sshConfig.Auth = []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		}
 	}
 	return ssh.Dial("tcp", fmt.Sprintf("%s:%d", sshLogin.Hostname, sshLogin.Port),
 		sshConfig)
