@@ -47,10 +47,11 @@ var (
 	ec2SecurityGroup    = ""
 	ec2KeyName          = ""
 	ec2DownloadPassword = ""
+	ec2KeyPath          = ""
 
 	cfgFileFlag string
 	dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag, cloudAccessKeyFlag, cloudPrivateKeyFlag,
-	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag string
+	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag, ec2KeyPathFlag string
 	dockerPortFlag int32
 )
 
@@ -87,6 +88,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&ec2KeyNameFlag, "ec2-key-name", "", "SSH key name to use when creating ec2 instances")
 	rootCmd.PersistentFlags().StringVar(&ec2SecurityGroupFlag, "ec2-security-group", "", "Security group to use when creating ec2 instances")
 	rootCmd.PersistentFlags().StringVar(&ec2DownloadPasswordFlag, "ec2-download-password", "", "Password used to download builds from outside the vpn")
+	rootCmd.PersistentFlags().StringVar(&ec2KeyPathFlag, "ec2-key-path", "", "Path to the SSH private key to connect to ec2 instances")
 
 	rootCmd.PersistentFlags().Int32Var(&dockerPortFlag, "docker-port", 0, "")
 	rootCmd.PersistentFlags().MarkDeprecated("docker-port", "Deprecated flag to specify the port of the docker host")
@@ -146,6 +148,7 @@ func initConfig() {
 	ec2SecurityGroupFlag = getStringArg("ec2-security-group")
 	ec2KeyNameFlag = getStringArg("ec2-key-name")
 	ec2DownloadPasswordFlag = getStringArg("ec2-download-password")
+	ec2KeyPathFlag = getStringArg("ec2-key-path")
 
 	dockerRegistry = dockerRegistryFlag
 	dockerHost = dockerHostFlag
@@ -157,6 +160,7 @@ func initConfig() {
 	ec2SecurityGroup = ec2SecurityGroupFlag
 	ec2KeyName = ec2KeyNameFlag
 	ec2DownloadPassword = ec2DownloadPasswordFlag
+	ec2KeyPath = ec2KeyPathFlag
 
 	if dockerPortFlag > 0 {
 		dockerHost = fmt.Sprintf("tcp://%s:%d", dockerHostFlag, dockerPortFlag)
@@ -339,7 +343,7 @@ func newDaemon() *daemon {
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
 	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, readOnlyStore)
 	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudProjectID, cloudURL, readOnlyStore)
-	d.ec2Service = ec2.NewEC2Service(aliasRepoPath, ec2SecurityGroup, ec2KeyName, ec2DownloadPassword, readOnlyStore)
+	d.ec2Service = ec2.NewEC2Service(aliasRepoPath, ec2SecurityGroup, ec2KeyName, ec2KeyPath, ec2DownloadPassword, readOnlyStore)
 
 	// Create a system context to use for system actions (like cleanups)
 	d.systemCtx = dyncontext.NewContext(context.Background(), "system", true)
