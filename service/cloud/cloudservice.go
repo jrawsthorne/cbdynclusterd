@@ -240,20 +240,19 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 		return nil, err
 	}
 
+	var nodes []*cluster.Node
+
 	_, addrs, err := net.LookupSRV("couchbases", "tcp", c.EndpointsSRV)
 
 	if err != nil {
-		return nil, err
-	}
-
-	var nodes []*cluster.Node
-	for i, addr := range addrs {
-		nodes = append(nodes, &cluster.Node{
-			ContainerID:          c.ID,
-			Name:                 fmt.Sprintf("node_%d", i),
-			InitialServerVersion: c.Version.Name,
-			IPv4Address:          addr.Target[:len(addr.Target)-1],
-		})
+		for i, addr := range addrs {
+			nodes = append(nodes, &cluster.Node{
+				ContainerID:          c.ID,
+				Name:                 fmt.Sprintf("node_%d", i),
+				InitialServerVersion: c.Version.Name,
+				IPv4Address:          addr.Target[:len(addr.Target)-1],
+			})
+		}
 	}
 
 	return &cluster.Cluster{
