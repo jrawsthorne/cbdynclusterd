@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
@@ -46,3 +47,5 @@ type ClusterService interface {
 type UnmanagedClusterService interface {
 	AllocateCluster(ctx context.Context, opts AllocateClusterOptions) error
 }
+
+var MaxCapacityError = errors.New("max capacity reached")

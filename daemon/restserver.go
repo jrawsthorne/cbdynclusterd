@@ -156,10 +156,31 @@ func (d *daemon) HttpCreateCluster(w http.ResponseWriter, r *http.Request) {
 		s = d.ec2Service
 	}
 
-	err = s.AllocateCluster(reqCtx, clusterOpts)
-	if err != nil {
-		writeJSONError(w, err)
-		return
+	for {
+		err = s.AllocateCluster(reqCtx, clusterOpts)
+		if err == service.MaxCapacityError {
+			// update timeout and try again
+			clusterOpts.Deadline = time.Now().Add(timeout)
+
+			err = d.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
+				meta.Timeout = clusterOpts.Deadline
+				return meta, nil
+			})
+
+			if err == nil {
+				time.Sleep(time.Duration(1) * time.Minute)
+				continue
+			}
+
+			// fall through if error updating timeout
+		}
+		// allocate or meta update failed
+		if err != nil {
+			writeJSONError(w, err)
+			return
+		}
+		// successfully allocated cluster
+		break
 	}
 
 	newClusterJson := NewClusterJSON{

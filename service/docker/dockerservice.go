@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"log"
+	"sync"
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
@@ -22,16 +23,71 @@ type DockerService struct {
 	dnsSvcHost     string
 	metaStore      *store.ReadOnlyMetaDataStore
 	aliasRepoPath  string
+
+	mu            sync.Mutex
+	reserved      map[string]int
+	maxContainers int32
 }
 
-func NewDockerService(d *client.Client, dockerRegistry, dnsSvcHost, aliasRepoPath string, metaStore *store.ReadOnlyMetaDataStore) *DockerService {
+func NewDockerService(d *client.Client, dockerRegistry, dnsSvcHost, aliasRepoPath string, maxContainers int32, metaStore *store.ReadOnlyMetaDataStore) *DockerService {
 	return &DockerService{
 		docker:         d,
 		dockerRegistry: dockerRegistry,
 		dnsSvcHost:     dnsSvcHost,
 		metaStore:      metaStore,
 		aliasRepoPath:  aliasRepoPath,
+		maxContainers:  maxContainers,
+		reserved:       make(map[string]int),
 	}
+}
+
+func (ds *DockerService) clearReservation(clusterID string) {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	delete(ds.reserved, clusterID)
+}
+
+func (ds *DockerService) reserve(ctx context.Context, clusterID string, count int) error {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	// unlimited
+	if ds.maxContainers == -1 {
+		return nil
+	}
+
+	clusters, err := ds.GetAllClusters(ctx)
+	if err != nil {
+		return err
+	}
+
+	// count reserved
+	reserved := 0
+	for _, c := range ds.reserved {
+		reserved += c
+	}
+
+	// count active
+	active := 0
+	for _, c := range clusters {
+		num := len(c.Nodes)
+		active += num
+
+		// clusters can exist before reserved count is decremented
+		// so remove any matching active nodes from reserved count
+		if _, exists := ds.reserved[c.ID]; exists {
+			reserved -= num
+		}
+	}
+
+	if reserved+active+count > int(ds.maxContainers) {
+		return service.MaxCapacityError
+	}
+
+	ds.reserved[clusterID] = count
+
+	return nil
 }
 
 func (ds *DockerService) GetCluster(ctx context.Context, clusterID string) (*cluster.Cluster, error) {
@@ -158,6 +214,11 @@ func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.Alloc
 		}
 	}
 
+	err = ds.reserve(ctx, opts.ClusterID, len(nodesToAllocate))
+	if err != nil {
+		return err
+	}
+
 	signal := make(chan error)
 
 	for _, node := range nodesToAllocate {
@@ -174,6 +235,9 @@ func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.Alloc
 			createError = err
 		}
 	}
+
+	ds.clearReservation(opts.ClusterID)
+
 	if createError != nil {
 		ds.KillCluster(ctx, opts.ClusterID)
 		return createError
