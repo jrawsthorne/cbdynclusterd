@@ -36,23 +36,24 @@ import (
 var (
 	defaultCfgFileName = ".cbdynclusterd.toml"
 
-	dockerRegistry      = "dockerhub.build.couchbase.com"
-	dockerHost          = "/var/run/docker.sock"
-	dnsSvcHost          = ""
-	aliasRepoPath       = helper.AliasRepoPath
-	cloudAccessKey      = ""
-	cloudPrivateKey     = ""
-	cloudURL            = "https://cloudapi.cloud.couchbase.com"
-	cloudProjectID      = ""
-	ec2SecurityGroup    = ""
-	ec2KeyName          = ""
-	ec2DownloadPassword = ""
-	ec2KeyPath          = ""
+	dockerRegistry            = "dockerhub.build.couchbase.com"
+	dockerHost                = "/var/run/docker.sock"
+	dnsSvcHost                = ""
+	aliasRepoPath             = helper.AliasRepoPath
+	cloudAccessKey            = ""
+	cloudPrivateKey           = ""
+	cloudURL                  = "https://cloudapi.cloud.couchbase.com"
+	cloudProjectID            = ""
+	ec2SecurityGroup          = ""
+	ec2KeyName                = ""
+	ec2DownloadPassword       = ""
+	ec2KeyPath                = ""
+	dockerMaxContainers int32 = -1
 
 	cfgFileFlag string
 	dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag, cloudAccessKeyFlag, cloudPrivateKeyFlag,
 	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag, ec2KeyPathFlag string
-	dockerPortFlag int32
+	dockerPortFlag, dockerMaxContainersFlag int32
 )
 
 var rootCmd = &cobra.Command{
@@ -89,6 +90,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&ec2SecurityGroupFlag, "ec2-security-group", "", "Security group to use when creating ec2 instances")
 	rootCmd.PersistentFlags().StringVar(&ec2DownloadPasswordFlag, "ec2-download-password", "", "Password used to download builds from outside the vpn")
 	rootCmd.PersistentFlags().StringVar(&ec2KeyPathFlag, "ec2-key-path", "", "Path to the SSH private key to connect to ec2 instances")
+	rootCmd.PersistentFlags().Int32Var(&dockerMaxContainersFlag, "docker-max-containers", -1, "Max number of contains to allocate")
 
 	rootCmd.PersistentFlags().Int32Var(&dockerPortFlag, "docker-port", 0, "")
 	rootCmd.PersistentFlags().MarkDeprecated("docker-port", "Deprecated flag to specify the port of the docker host")
@@ -149,6 +151,7 @@ func initConfig() {
 	ec2KeyNameFlag = getStringArg("ec2-key-name")
 	ec2DownloadPasswordFlag = getStringArg("ec2-download-password")
 	ec2KeyPathFlag = getStringArg("ec2-key-path")
+	dockerMaxContainersFlag = getInt32Arg("docker-max-containers")
 
 	dockerRegistry = dockerRegistryFlag
 	dockerHost = dockerHostFlag
@@ -161,6 +164,7 @@ func initConfig() {
 	ec2KeyName = ec2KeyNameFlag
 	ec2DownloadPassword = ec2DownloadPasswordFlag
 	ec2KeyPath = ec2KeyPathFlag
+	dockerMaxContainers = dockerMaxContainersFlag
 
 	if dockerPortFlag > 0 {
 		dockerHost = fmt.Sprintf("tcp://%s:%d", dockerHostFlag, dockerPortFlag)
@@ -341,7 +345,7 @@ func newDaemon() *daemon {
 	}
 
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
-	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, readOnlyStore)
+	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, dockerMaxContainers, readOnlyStore)
 	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudProjectID, cloudURL, readOnlyStore)
 	d.ec2Service = ec2.NewEC2Service(aliasRepoPath, ec2SecurityGroup, ec2KeyName, ec2KeyPath, ec2DownloadPassword, readOnlyStore)
 
