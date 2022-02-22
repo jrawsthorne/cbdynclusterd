@@ -48,7 +48,7 @@ func (ds *DockerService) clearReservation(clusterID string) {
 	delete(ds.reserved, clusterID)
 }
 
-func (ds *DockerService) reserve(ctx context.Context, clusterID string, count int) error {
+func (ds *DockerService) reserve(clusterID string, count int) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -57,7 +57,8 @@ func (ds *DockerService) reserve(ctx context.Context, clusterID string, count in
 		return nil
 	}
 
-	clusters, err := ds.GetAllClusters(ctx)
+	systemCtx := dyncontext.NewContext(context.Background(), "system", true)
+	clusters, err := ds.GetAllClusters(systemCtx)
 	if err != nil {
 		return err
 	}
@@ -214,7 +215,7 @@ func (ds *DockerService) AllocateCluster(ctx context.Context, opts service.Alloc
 		}
 	}
 
-	err = ds.reserve(ctx, opts.ClusterID, len(nodesToAllocate))
+	err = ds.reserve(opts.ClusterID, len(nodesToAllocate))
 	if err != nil {
 		return err
 	}
