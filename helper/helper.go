@@ -84,6 +84,8 @@ const (
 	AliasRepo     = "https://github.com/couchbaselabs/cb-alias.git"
 	AliasRepoPath = "/opt/cbdynclusterd/alias"
 	AliasFileName = "products.yml"
+
+	FtsDefaultMemoryQuota = 512
 )
 
 type UserOption struct {

@@ -234,7 +234,7 @@ func (n *Node) AllowStrictEncryption() error {
 }
 
 func (n *Node) SetMemoryQuota(quota string) error {
-	body := fmt.Sprintf("memoryQuota=%s", quota)
+	body := fmt.Sprintf("memoryQuota=%s&ftsMemoryQuota=%d", quota, helper.FtsDefaultMemoryQuota)
 
 	restParam := &helper.RestCall{
 		ExpectedCode: 200,
