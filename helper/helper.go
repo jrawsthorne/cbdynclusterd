@@ -85,7 +85,7 @@ const (
 	AliasRepoPath = "/opt/cbdynclusterd/alias"
 	AliasFileName = "products.yml"
 
-	FtsDefaultMemoryQuota = 512
+	FtsDefaultMemoryQuota = 1024
 )
 
 type UserOption struct {
