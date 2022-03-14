@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -33,6 +34,9 @@ type EC2Service struct {
 	keyName          string
 	keyPath          string
 	downloadPassword string
+
+	buildingImages map[string]chan error
+	mu             sync.Mutex
 }
 
 func NewEC2Service(aliasRepoPath, securityGroup, keyName, keyPath, downloadPassword string, metaStore *store.ReadOnlyMetaDataStore) *EC2Service {
@@ -57,6 +61,8 @@ func NewEC2Service(aliasRepoPath, securityGroup, keyName, keyPath, downloadPassw
 		keyPath:          keyPath,
 		securityGroup:    securityGroup,
 		downloadPassword: downloadPassword,
+
+		buildingImages: make(map[string]chan error),
 	}
 }
 
@@ -130,6 +136,22 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 		return nil
 	}
 
+	s.mu.Lock()
+	// wait for other build to complete
+	if waitChan, building := s.buildingImages[imageName]; building {
+		s.mu.Unlock()
+		log.Printf("Image %s is already being built, waiting...", imageName)
+		select {
+		case err := <-waitChan:
+			return err
+		case <-time.After(1 * time.Hour):
+			return errors.New("timed out waiting for image to be built")
+		}
+	}
+	waitChan := make(chan error)
+	s.buildingImages[imageName] = waitChan
+	s.mu.Unlock()
+
 	log.Printf("No image found for %s, building...", imageName)
 
 	err = CallPacker(PackerOptions{
@@ -141,6 +163,13 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 		Arch:             nodeVersion.Arch,
 		OS:               nodeVersion.OS,
 	})
+
+	// inform any waiters
+	waitChan <- err
+	close(waitChan)
+	s.mu.Lock()
+	delete(s.buildingImages, imageName)
+	s.mu.Unlock()
 
 	return err
 }
