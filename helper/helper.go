@@ -86,6 +86,8 @@ const (
 	AliasFileName = "products.yml"
 
 	FtsDefaultMemoryQuota = 1024
+
+	CapellaRoles = "query_manage_functions[*],query_manage_external_functions[*],scope_admin[*],data_writer[*],query_update[*],query_insert[*],query_delete[*],query_manage_index[*],fts_admin[*],query_manage_global_functions,query_manage_global_external_functions"
 )
 
 type UserOption struct {

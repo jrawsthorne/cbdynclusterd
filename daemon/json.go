@@ -163,6 +163,7 @@ type ClusterJSON struct {
 	Timeout    string     `json:"timeout"`
 	Nodes      []NodeJSON `json:"nodes"`
 	EntryPoint string     `json:"entry"`
+	CACert     []byte     `json:"cacert"`
 }
 
 type CreateClusterNodeJSON struct {
@@ -183,6 +184,7 @@ type CreateClusterSetupJSON struct {
 	Bucket              *helper.BucketOption `json:"bucket"`
 	User                *helper.UserOption   `json:"user"`
 	UseDeveloperPreview bool                 `json:"developer_preview"`
+	Capella             bool                 `json:"capella"`
 }
 
 type SetupClusterEncryptionJSON struct {

@@ -323,6 +323,61 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 	c.EntryPoint = epnode
 
 	jsonCluster := jsonifyCluster(c)
+
+	if reqData.Capella {
+		if meta.Platform != store.ClusterPlatformEC2 {
+			writeJSONError(w, errors.New("must be an ec2 cluster to setup like capella"))
+			return
+		}
+
+		// we can setup tls using setup cert auth but ignore the client cert and key
+		certData, err := s.SetupCertAuth(reqCtx, clusterID, service.SetupClientCertAuthOptions{
+			UserName: helper.RestUser,
+			NumRoots: 1,
+		})
+		if err != nil {
+			writeJSONError(w, err)
+			return
+		}
+
+		// n2n encryption
+		// update meta so we know to connect over secure ports or not for commands
+		err = d.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
+			meta.UseSecure = true
+			return meta, nil
+		})
+		if err != nil {
+			writeJSONError(w, errors.New("couldn't update cluster meta"))
+			return
+		}
+
+		err = s.SetupClusterEncryption(reqCtx, clusterID, service.SetupClusterEncryptionOptions{
+			Level:     "strict",
+			UseSecure: true,
+		})
+		if err != nil {
+			writeJSONError(w, err)
+			return
+		}
+
+		// non admin user
+		roles := strings.Split(helper.CapellaRoles, ",")
+		err = s.AddUser(reqCtx, clusterID, service.AddUserOptions{
+			User: &helper.UserOption{
+				Name:     "user",
+				Password: "password",
+				Roles:    &roles,
+			},
+			UseSecure: true,
+		})
+		if err != nil {
+			writeJSONError(w, err)
+			return
+		}
+
+		jsonCluster.CACert = certData.CACert
+	}
+
 	writeJsonResponse(w, jsonCluster)
 	return
 }
@@ -375,7 +430,7 @@ func (d *daemon) HttpSetupClusterEncryption(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = common.SetupClusterEncryption(reqCtx, s, clusterID, service.SetupClusterEncryptionOptions{
+	err = s.SetupClusterEncryption(reqCtx, clusterID, service.SetupClusterEncryptionOptions{
 		Level:     reqData.Level,
 		UseSecure: useSecure,
 	})
