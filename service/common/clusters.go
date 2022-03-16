@@ -263,3 +263,27 @@ func KillAllClusters(ctx context.Context, s service.ClusterService) error {
 
 	return nil
 }
+
+func AddUser(ctx context.Context, s service.ClusterService, clusterID string, opts service.AddUserOptions) error {
+	log.Printf("Adding user %s on cluster %s (requested by: %s)", opts.User.Name, clusterID, dyncontext.ContextUser(ctx))
+
+	c, err := s.GetCluster(ctx, clusterID)
+	if err != nil {
+		return err
+	}
+
+	if len(c.Nodes) == 0 {
+		return errors.New("no nodes available")
+	}
+
+	hostname := c.Nodes[0].IPv4Address
+
+	node := &Node{
+		HostName:  hostname,
+		Port:      strconv.Itoa(helper.GetRestPort(opts.UseSecure)),
+		SshLogin:  &helper.Cred{Username: helper.SshUser, Password: helper.SshPass, Hostname: hostname, Port: helper.SshPort},
+		RestLogin: &helper.Cred{Username: helper.RestUser, Password: helper.RestPass, Hostname: hostname, Port: helper.GetRestPort(opts.UseSecure), Secure: opts.UseSecure},
+	}
+
+	return node.CreateUser(opts.User)
+}

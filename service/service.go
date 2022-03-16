@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
 )
 
 type CertAuthResult struct {
@@ -39,7 +38,7 @@ type ClusterService interface {
 	AddBucket(ctx context.Context, clusterID string, opts AddBucketOptions) error
 	AddSampleBucket(ctx context.Context, clusterID string, opts AddSampleOptions) error
 	AddIP(ctx context.Context, clusterID, ip string) error
-	AddUser(ctx context.Context, clusterID string, user *helper.UserOption, bucket string) error
+	AddUser(ctx context.Context, clusterID string, opts AddUserOptions) error
 	ConnString(ctx context.Context, clusterID string, useSSL bool, useSrv bool) (string, error)
 	SetupClusterEncryption(ctx context.Context, clusterID string, opts SetupClusterEncryptionOptions) error
 }

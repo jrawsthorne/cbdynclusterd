@@ -690,7 +690,10 @@ func (d *daemon) HttpAddUser(w http.ResponseWriter, r *http.Request) {
 		s = d.dockerService
 	}
 
-	err = s.AddUser(reqCtx, clusterID, reqData.User, reqData.Bucket)
+	err = s.AddUser(reqCtx, clusterID, service.AddUserOptions{
+		User:      reqData.User,
+		UseSecure: meta.UseSecure,
+	})
 	if err != nil {
 		writeJSONError(w, err)
 		return
