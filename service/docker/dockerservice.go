@@ -7,7 +7,6 @@ import (
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
 	"github.com/couchbaselabs/cbdynclusterd/service"
 	"github.com/couchbaselabs/cbdynclusterd/service/common"
 	"github.com/couchbaselabs/cbdynclusterd/store"
@@ -325,8 +324,8 @@ func (ds *DockerService) AddSampleBucket(ctx context.Context, clusterID string, 
 	return common.AddSampleBucket(ctx, ds, clusterID, opts)
 }
 
-func (ds *DockerService) AddUser(ctx context.Context, clusterID string, user *helper.UserOption, bucket string) error {
-	return errors.New("not supported")
+func (ds *DockerService) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions) error {
+	return common.AddUser(ctx, ds, clusterID, opts)
 }
 
 func (ds *DockerService) AddIP(ctx context.Context, clusterID, ip string) error {

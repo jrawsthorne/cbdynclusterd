@@ -135,7 +135,7 @@ func (cs *CloudService) killCluster(ctx context.Context, clusterID, cloudCluster
 	return nil
 }
 
-func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID, bucket string, user *helper.UserOption) error {
+func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID string, user *helper.UserOption) error {
 	log.Printf("Running cloud AddUser for %s: %s", clusterID, cloudClusterID)
 
 	var u databaseUserJSON
@@ -266,7 +266,7 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 	}, nil
 }
 
-func (cs *CloudService) AddUser(ctx context.Context, clusterID string, user *helper.UserOption, bucket string) error {
+func (cs *CloudService) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions) error {
 	if !cs.enabled {
 		return ErrCloudNotEnabled
 	}
@@ -282,7 +282,7 @@ func (cs *CloudService) AddUser(ctx context.Context, clusterID string, user *hel
 		return errors.New("unknown cluster")
 	}
 
-	return cs.addUser(ctx, clusterID, meta.CloudClusterID, bucket, user)
+	return cs.addUser(ctx, clusterID, meta.CloudClusterID, opts.User)
 }
 
 type allowListJSON struct {

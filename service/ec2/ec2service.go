@@ -17,7 +17,6 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
-	"github.com/couchbaselabs/cbdynclusterd/helper"
 	"github.com/couchbaselabs/cbdynclusterd/service"
 	"github.com/couchbaselabs/cbdynclusterd/service/common"
 	"github.com/couchbaselabs/cbdynclusterd/store"
@@ -491,8 +490,8 @@ func (s *EC2Service) GetAllClusters(ctx context.Context) ([]*cluster.Cluster, er
 	return s.getFilteredClusters(ctx, filters)
 }
 
-func (s *EC2Service) AddUser(ctx context.Context, clusterID string, user *helper.UserOption, bucket string) error {
-	return errors.New("not supported")
+func (s *EC2Service) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions) error {
+	return common.AddUser(ctx, s, clusterID, opts)
 }
 
 func (s *EC2Service) AddIP(ctx context.Context, clusterID, ip string) error {

@@ -1,5 +1,7 @@
 package service
 
+import "github.com/couchbaselabs/cbdynclusterd/helper"
+
 type AddCollectionOptions struct {
 	Name        string
 	ScopeName   string
@@ -36,5 +38,10 @@ type AddSampleOptions struct {
 
 type SetupClusterEncryptionOptions struct {
 	Level     string
+	UseSecure bool
+}
+
+type AddUserOptions struct {
+	User      *helper.UserOption
 	UseSecure bool
 }
