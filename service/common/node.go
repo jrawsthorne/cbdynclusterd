@@ -218,6 +218,22 @@ func (n *Node) SetClusterEncryptionLevel(level string) error {
 	return err
 }
 
+// Set the minimum magma bucket size to 256MB as this is what tests expect
+func (n *Node) SetLowMagmaMinMemoryQuote() error {
+	body := "magmaMinMemoryQuota=256"
+
+	restParam := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "POST",
+		Path:         helper.PInternalSettings,
+		Cred:         n.RestLogin,
+		Body:         body,
+		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	}
+	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	return err
+}
+
 func (n *Node) AllowStrictEncryption() error {
 	body := fmt.Sprintf("canEnableStrictEncryption=true")
 

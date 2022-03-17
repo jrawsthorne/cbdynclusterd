@@ -235,6 +235,13 @@ func (m *Manager) setupNewCluster() (string, error) {
 		return "", err
 	}
 
+	// set minimum magma memory quota for >= neo
+	if version.Major > 7 || version.Major == 7 && version.Minor >= 1 {
+		if err := epnode.SetLowMagmaMinMemoryQuote(); err != nil {
+			return "", err
+		}
+	}
+
 	if version.Major >= 5 && len(m.Config.User.Name) > 0 {
 		glog.Info("CreateUser")
 		if err := epnode.CreateUser(m.Config.User); err != nil {
