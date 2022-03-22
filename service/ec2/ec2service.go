@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -199,6 +200,52 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 	return err
 }
 
+func (s *EC2Service) srvName(clusterID string, secure bool) string {
+	const (
+		securePrefix   = "couchbases"
+		insecurePrefix = "couchbase"
+	)
+
+	prefix := insecurePrefix
+	if secure {
+		prefix = securePrefix
+	}
+
+	return fmt.Sprintf("_%s._tcp.%s.%s", prefix, clusterID, s.domainName)
+
+}
+
+func (s *EC2Service) hasSrvRecord(ctx context.Context, clusterID string) (error, bool) {
+	// dns operations are atomic so either both (couchbase and couchbases) will exist or neither will
+	expectedRecords := 2
+
+	// _couchbase._tcp. > _couchbase._tcp.
+	srvName := s.srvName(clusterID, true)
+
+	input := route53.ListResourceRecordSetsInput{
+		HostedZoneId:    aws.String(s.hostedZoneId),
+		StartRecordName: aws.String(srvName),
+		StartRecordType: route53types.RRTypeSrv,
+		MaxItems:        aws.Int32(int32(expectedRecords)),
+	}
+
+	out, err := s.route53Client.ListResourceRecordSets(ctx, &input)
+
+	if err != nil {
+		return err, false
+	}
+
+	actualRecords := 0
+
+	for _, record := range out.ResourceRecordSets {
+		if strings.Contains(*record.Name, clusterID) {
+			actualRecords += 1
+		}
+	}
+
+	return nil, actualRecords == expectedRecords
+}
+
 func (s *EC2Service) removeSrvRecord(ctx context.Context, cluster *cluster.Cluster) error {
 	return s.changeSrvRecord(ctx, cluster, route53types.ChangeActionDelete)
 }
@@ -216,15 +263,15 @@ func (s *EC2Service) changeSrvRecord(ctx context.Context, cluster *cluster.Clust
 	changes := make([]route53types.Change, 0, 2)
 
 	type variant struct {
-		port int
-		name string
+		port   int
+		secure bool
 	}
 
 	// secure and insecure
-	variants := []variant{{port: 11207, name: "couchbases"}, {port: 11210, name: "couchbase"}}
+	variants := []variant{{port: 11207, secure: true}, {port: 11210, secure: false}}
 
 	for _, variant := range variants {
-		name := fmt.Sprintf("_%s._tcp.%s.%s", variant.name, cluster.ID, s.domainName)
+		name := s.srvName(cluster.ID, variant.secure)
 		records := make([]route53types.ResourceRecord, 0, len(hostnames))
 		for _, hostname := range hostnames {
 			// Format: [priority] [weight] [port] [server host name]
@@ -545,9 +592,14 @@ func (s *EC2Service) KillCluster(ctx context.Context, clusterID string) error {
 	}
 
 	if s.route53Enabled {
-		err = s.removeSrvRecord(ctx, c)
+		err, has := s.hasSrvRecord(ctx, c.ID)
 		if err != nil {
 			return err
+		}
+		if has {
+			if err = s.removeSrvRecord(ctx, c); err != nil {
+				return err
+			}
 		}
 	}
 
