@@ -1019,14 +1019,19 @@ func (n *Node) StopRebalance() (string, error) {
 	return helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
 }
 
-func (n *Node) GetInfo() (string, error) {
+func (n *Node) GetInfo() (*RefInfo, error) {
 	restParam := &helper.RestCall{
 		ExpectedCode: 200,
 		Method:       "GET",
 		Path:         helper.PPools,
 		Cred:         n.RestLogin,
 	}
-	return helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	info, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
+	var refInfo RefInfo
+	if json.Unmarshal([]byte(info), &refInfo); err != nil {
+		return nil, err
+	}
+	return &refInfo, nil
 }
 
 func (n *Node) StartServer(wg *sync.WaitGroup) {

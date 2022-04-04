@@ -3,7 +3,6 @@ package common
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -46,6 +45,7 @@ type RefInfo struct {
 	ClusterVersion string  `json:"implementationVersion"`
 	Pools          []Pools `json:"pools""`
 	ClusterId      string
+	IsEnterprise   bool `json:"isEnterprise"`
 }
 
 type VersionTuple struct {
@@ -65,7 +65,6 @@ type Config struct {
 	StorageMode   string
 	Bucket        *helper.BucketOption
 	UseHostname   bool
-	IsEnterprise  bool
 	UseDevPreview bool
 }
 
@@ -101,7 +100,6 @@ func (m *Manager) ScpToLocalDir(hostname, src, dest string) error {
 }
 
 func (m *Manager) StartCluster() (string, error) {
-	var refInfo RefInfo
 	existingCluster := make(map[string][]*Node)
 	// Ensure we can connect to the REST port
 	for _, n := range m.Nodes {
@@ -110,15 +108,10 @@ func (m *Manager) StartCluster() (string, error) {
 			return "", err
 		}
 
-		err = json.Unmarshal([]byte(info), &refInfo)
-		if err != nil {
-			return "", err
-		}
-
-		if refInfo.Pools != nil && len(refInfo.Pools) > 0 {
-			refInfo.ClusterId = refInfo.Pools[0].Uri
-			if len(refInfo.ClusterId) > 0 {
-				existingCluster[refInfo.ClusterId] = append(existingCluster[refInfo.ClusterId], n)
+		if info.Pools != nil && len(info.Pools) > 0 {
+			info.ClusterId = info.Pools[0].Uri
+			if len(info.ClusterId) > 0 {
+				existingCluster[info.ClusterId] = append(existingCluster[info.ClusterId], n)
 			}
 		}
 	}
@@ -235,8 +228,12 @@ func (m *Manager) setupNewCluster() (string, error) {
 		return "", err
 	}
 
-	// set minimum magma memory quota for >= neo
-	if version.Major > 7 || version.Major == 7 && version.Minor >= 1 {
+	// set minimum magma memory quota for >= neo (magma not supported on community edition)
+	info, err := epnode.GetInfo()
+	if err != nil {
+		return "", err
+	}
+	if (version.Major > 7 || version.Major == 7 && version.Minor >= 1) && info.IsEnterprise {
 		if err := epnode.SetLowMagmaMinMemoryQuote(); err != nil {
 			return "", err
 		}
@@ -305,19 +302,13 @@ func (m *Manager) setupNewCluster() (string, error) {
 }
 
 func getVersion(node *Node) (*VersionTuple, error) {
-	var refInfo RefInfo
 	node.Update(false)
 	info, err := node.GetInfo()
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal([]byte(info), &refInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	version := refInfo.ClusterVersion
+	version := info.ClusterVersion
 
 	parsed := strings.Split(version, ".")
 	if len(parsed) != 3 {
