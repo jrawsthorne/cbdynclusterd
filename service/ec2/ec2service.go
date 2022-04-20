@@ -41,7 +41,7 @@ type EC2Service struct {
 	domainName       string
 	hostedZoneId     string
 
-	buildingImages map[string]chan error
+	buildingImages map[string]*[]chan error
 	mu             sync.Mutex
 }
 
@@ -88,7 +88,7 @@ func NewEC2Service(opts *EC2ServiceOptions) *EC2Service {
 		hostedZoneId:     opts.HostedZoneId,
 		domainName:       opts.DomainName,
 
-		buildingImages: make(map[string]chan error),
+		buildingImages: make(map[string]*[]chan error),
 	}
 }
 
@@ -164,7 +164,9 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 
 	s.mu.Lock()
 	// wait for other build to complete
-	if waitChan, building := s.buildingImages[imageName]; building {
+	if waitChans, building := s.buildingImages[imageName]; building {
+		waitChan := make(chan error)
+		*waitChans = append(*waitChans, waitChan)
 		s.mu.Unlock()
 		log.Printf("Image %s is already being built, waiting...", imageName)
 		select {
@@ -174,8 +176,9 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 			return errors.New("timed out waiting for image to be built")
 		}
 	}
-	waitChan := make(chan error)
-	s.buildingImages[imageName] = waitChan
+
+	waitChains := make([]chan error, 0)
+	s.buildingImages[imageName] = &waitChains
 	s.mu.Unlock()
 
 	log.Printf("No image found for %s, building...", imageName)
@@ -191,9 +194,14 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 	})
 
 	// inform any waiters
-	waitChan <- err
-	close(waitChan)
 	s.mu.Lock()
+	for _, waitChan := range *s.buildingImages[imageName] {
+		// waiter may not be listening anymore so have a fallback
+		select {
+		case waitChan <- err:
+		default:
+		}
+	}
 	delete(s.buildingImages, imageName)
 	s.mu.Unlock()
 
