@@ -132,16 +132,44 @@ const (
 	V3BucketRoleDataWriter V3BucketRole = "data_writer"
 )
 
-type databaseUserJSON struct {
-	Username         string       `json:"username"`
-	Password         string       `json:"password"`
-	AllBucketsAccess V3BucketRole `json:"allBucketsAccess"`
+type ScopePermission struct {
+	Name string `json:"name"`
 }
 
+type BucketPermission struct {
+	Name   string            `json:"name"`
+	Scopes []ScopePermission `json:"scopes,omitempty"`
+}
+
+type Permissions struct {
+	Buckets []BucketPermission `json:"buckets,omitempty"`
+}
+
+type ReadWritePermissions struct {
+	DataReader *Permissions `json:"data_reader"`
+	DataWriter *Permissions `json:"data_writer"`
+}
+
+type databaseUserJSON struct {
+	Name        string               `json:"name"`
+	Password    string               `json:"password"`
+	Permissions ReadWritePermissions `json:"permissions"`
+}
+
+// TODO: Use public API when AV-27634 fixed
+
+// type databaseUserJSON struct {
+// 	Username         string       `json:"username"`
+// 	Password         string       `json:"password"`
+// 	AllBucketsAccess V3BucketRole `json:"allBucketsAccess"`
+// }
+
 type bucketSpecJSON struct {
-	Name        string `json:"name"`
-	MemoryQuota int    `json:"memoryQuota"`
-	Replicas    int    `json:"replicas"`
+	Name              string `json:"name"`
+	MemoryQuota       int    `json:"memoryAllocationInMb"`
+	Replicas          int    `json:"replicas"`
+	ConflicResolution string `json:"bucketConflictResolution"`
+	DurabilityLevel   string `json:"durabilityLevel"`
 }
 
 type bucketDeleteJSON struct {
@@ -155,4 +183,30 @@ type clusterHealthResponse struct {
 		TotalCount     int               `json:"totalCount"`
 		UnhealthyCount int               `json:"unhealthyCount"`
 	} `json:"bucketStats"`
+}
+
+type sessionsResponse struct {
+	Jwt string `json:"jwt"`
+}
+
+type allowListJSON struct {
+	CIDR    string `json:"cidr"`
+	Comment string `json:"comment"`
+}
+
+type allowListBulkJSON struct {
+	Create []allowListJSON `json:"create"`
+}
+
+type addSampleBucketJSON struct {
+	Name string `json:"name"`
+}
+
+type getNodesJson struct {
+	Data []struct {
+		Data struct {
+			Hostname string `json:"hostname"`
+			ID       string `json:"id"`
+		} `json:"data"`
+	} `json:"data"`
 }

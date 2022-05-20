@@ -3,45 +3,35 @@ package service
 import "github.com/couchbaselabs/cbdynclusterd/helper"
 
 type AddCollectionOptions struct {
-	Name        string
-	ScopeName   string
-	BucketName  string
-	UseHostname bool
-	UseSecure   bool
+	Name       string
+	ScopeName  string
+	BucketName string
 }
 
 type SetupClientCertAuthOptions struct {
-	UserName    string
-	UserEmail   string
-	NumRoots    int
-	SSHKeyPath  string
-	SSHUsername string
+	UserName  string
+	UserEmail string
+	NumRoots  int
 }
 
 type AddBucketOptions struct {
 	Name           string
 	StorageMode    string
 	RamQuota       int
-	UseHostname    bool
 	ReplicaCount   int
 	BucketType     string
 	EvictionPolicy string
 	StorageBackend string
-	UseSecure      bool
 }
 
 type AddSampleOptions struct {
 	SampleBucket string
-	UseHostname  bool
-	UseSecure    bool
 }
 
 type SetupClusterEncryptionOptions struct {
-	Level     string
-	UseSecure bool
+	Level string
 }
 
 type AddUserOptions struct {
-	User      *helper.UserOption
-	UseSecure bool
+	User *helper.UserOption
 }

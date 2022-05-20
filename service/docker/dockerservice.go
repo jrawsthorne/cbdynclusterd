@@ -304,28 +304,28 @@ func (ds *DockerService) EnsureImageExists(ctx context.Context, serverVersion, o
 	return nodeVersion.ToImageName(ds.dockerRegistry), nil
 }
 
-func (ds *DockerService) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions) error {
-	return common.AddCollection(ctx, ds, clusterID, opts)
+func (ds *DockerService) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions, connCtx service.ConnectContext) error {
+	return common.AddCollection(ctx, ds, clusterID, opts, connCtx)
 }
 
-func (ds *DockerService) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions) (*service.CertAuthResult, error) {
-	return common.SetupCertAuth(ctx, ds, clusterID, opts)
+func (ds *DockerService) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions, connCtx service.ConnectContext) (*service.CertAuthResult, error) {
+	return common.SetupCertAuth(ctx, ds, clusterID, opts, connCtx)
 }
 
-func (s *DockerService) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions) error {
-	return common.SetupClusterEncryption(ctx, s, clusterID, opts)
+func (s *DockerService) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions, connCtx service.ConnectContext) error {
+	return common.SetupClusterEncryption(ctx, s, clusterID, opts, connCtx)
 }
 
-func (ds *DockerService) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions) error {
-	return common.AddBucket(ctx, ds, clusterID, opts)
+func (ds *DockerService) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions, connCtx service.ConnectContext) error {
+	return common.AddBucket(ctx, ds, clusterID, opts, connCtx)
 }
 
-func (ds *DockerService) AddSampleBucket(ctx context.Context, clusterID string, opts service.AddSampleOptions) error {
-	return common.AddSampleBucket(ctx, ds, clusterID, opts)
+func (ds *DockerService) AddSampleBucket(ctx context.Context, clusterID string, opts service.AddSampleOptions, connCtx service.ConnectContext) error {
+	return common.AddSampleBucket(ctx, ds, clusterID, opts, connCtx)
 }
 
-func (ds *DockerService) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions) error {
-	return common.AddUser(ctx, ds, clusterID, opts)
+func (ds *DockerService) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions, connCtx service.ConnectContext) error {
+	return common.AddUser(ctx, ds, clusterID, opts, connCtx)
 }
 
 func (ds *DockerService) AddIP(ctx context.Context, clusterID, ip string) error {

@@ -545,8 +545,8 @@ func (s *EC2Service) GetAllClusters(ctx context.Context) ([]*cluster.Cluster, er
 	return s.getFilteredClusters(ctx, filters)
 }
 
-func (s *EC2Service) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions) error {
-	return common.AddUser(ctx, s, clusterID, opts)
+func (s *EC2Service) AddUser(ctx context.Context, clusterID string, opts service.AddUserOptions, connCtx service.ConnectContext) error {
+	return common.AddUser(ctx, s, clusterID, opts, connCtx)
 }
 
 func (s *EC2Service) AddIP(ctx context.Context, clusterID, ip string) error {
@@ -624,11 +624,11 @@ func (s *EC2Service) KillAllClusters(ctx context.Context) error {
 	return common.KillAllClusters(ctx, s)
 }
 
-func (s *EC2Service) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions) error {
-	return common.AddCollection(ctx, s, clusterID, opts)
+func (s *EC2Service) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions, connCtx service.ConnectContext) error {
+	return common.AddCollection(ctx, s, clusterID, opts, connCtx)
 }
 
-func (s *EC2Service) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions) (*service.CertAuthResult, error) {
+func (s *EC2Service) SetupCertAuth(ctx context.Context, clusterID string, opts service.SetupClientCertAuthOptions, connCtx service.ConnectContext) (*service.CertAuthResult, error) {
 	meta, err := s.metaStore.GetClusterMeta(clusterID)
 	if err != nil {
 		return nil, err
@@ -636,21 +636,21 @@ func (s *EC2Service) SetupCertAuth(ctx context.Context, clusterID string, opts s
 	if meta.OS == "" {
 		return nil, errors.New("cluster does not have an OS specified")
 	}
-	opts.SSHKeyPath = s.keyPath
-	opts.SSHUsername = osToSSHUsername[meta.OS]
-	return common.SetupCertAuth(ctx, s, clusterID, opts)
+	connCtx.SshKeyPath = s.keyPath
+	connCtx.SshUsername = osToSSHUsername[meta.OS]
+	return common.SetupCertAuth(ctx, s, clusterID, opts, connCtx)
 }
 
-func (s *EC2Service) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions) error {
-	return common.SetupClusterEncryption(ctx, s, clusterID, opts)
+func (s *EC2Service) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions, connCtx service.ConnectContext) error {
+	return common.SetupClusterEncryption(ctx, s, clusterID, opts, connCtx)
 }
 
-func (s *EC2Service) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions) error {
-	return common.AddBucket(ctx, s, clusterID, opts)
+func (s *EC2Service) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions, connCtx service.ConnectContext) error {
+	return common.AddBucket(ctx, s, clusterID, opts, connCtx)
 }
 
-func (s *EC2Service) AddSampleBucket(ctx context.Context, clusterID string, opts service.AddSampleOptions) error {
-	return common.AddSampleBucket(ctx, s, clusterID, opts)
+func (s *EC2Service) AddSampleBucket(ctx context.Context, clusterID string, opts service.AddSampleOptions, connCtx service.ConnectContext) error {
+	return common.AddSampleBucket(ctx, s, clusterID, opts, connCtx)
 }
 
 func (s *EC2Service) ConnString(ctx context.Context, clusterID string, useSSL, useSrv bool) (string, error) {

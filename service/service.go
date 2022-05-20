@@ -28,22 +28,33 @@ type CreateNodeOptions struct {
 	OS                  string
 	Arch                string
 }
+
+type ConnectContext struct {
+	RestUsername string
+	RestPassword string
+	UseSecure    bool
+	SshUsername  string
+	SshPassword  string
+	SshKeyPath   string
+}
+
 type ClusterService interface {
 	GetCluster(ctx context.Context, clusterID string) (*cluster.Cluster, error)
 	GetAllClusters(ctx context.Context) ([]*cluster.Cluster, error)
 	KillCluster(ctx context.Context, clusterID string) error
 	KillAllClusters(ctx context.Context) error
-	AddCollection(ctx context.Context, clusterID string, opts AddCollectionOptions) error
-	SetupCertAuth(ctx context.Context, clusterID string, opts SetupClientCertAuthOptions) (*CertAuthResult, error)
-	AddBucket(ctx context.Context, clusterID string, opts AddBucketOptions) error
-	AddSampleBucket(ctx context.Context, clusterID string, opts AddSampleOptions) error
+	AddCollection(ctx context.Context, clusterID string, opts AddCollectionOptions, connCtx ConnectContext) error
+	SetupCertAuth(ctx context.Context, clusterID string, opts SetupClientCertAuthOptions, connCtx ConnectContext) (*CertAuthResult, error)
+	AddBucket(ctx context.Context, clusterID string, opts AddBucketOptions, connCtx ConnectContext) error
+	AddSampleBucket(ctx context.Context, clusterID string, opts AddSampleOptions, connCtx ConnectContext) error
 	AddIP(ctx context.Context, clusterID, ip string) error
-	AddUser(ctx context.Context, clusterID string, opts AddUserOptions) error
+	AddUser(ctx context.Context, clusterID string, opts AddUserOptions, connCtx ConnectContext) error
 	ConnString(ctx context.Context, clusterID string, useSSL bool, useSrv bool) (string, error)
-	SetupClusterEncryption(ctx context.Context, clusterID string, opts SetupClusterEncryptionOptions) error
+	SetupClusterEncryption(ctx context.Context, clusterID string, opts SetupClusterEncryptionOptions, connCtx ConnectContext) error
 }
 
 type UnmanagedClusterService interface {
+	ClusterService
 	AllocateCluster(ctx context.Context, opts AllocateClusterOptions) error
 }
 

@@ -281,7 +281,7 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var s service.ClusterService
+	var s service.UnmanagedClusterService
 	if meta.Platform == store.ClusterPlatformCloud {
 		writeJSONError(w, errors.New("cannot setup a cloud cluster"))
 		return
@@ -314,7 +314,7 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 		StorageMode:         reqData.StorageMode,
 		Bucket:              reqData.Bucket,
 		UseDeveloperPreview: reqData.UseDeveloperPreview,
-	})
+	}, service.ConnectContext{})
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -334,7 +334,7 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 		certData, err := s.SetupCertAuth(reqCtx, clusterID, service.SetupClientCertAuthOptions{
 			UserName: helper.RestUser,
 			NumRoots: 1,
-		})
+		}, service.ConnectContext{})
 		if err != nil {
 			writeJSONError(w, err)
 			return
@@ -352,9 +352,8 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 		}
 
 		err = s.SetupClusterEncryption(reqCtx, clusterID, service.SetupClusterEncryptionOptions{
-			Level:     "strict",
-			UseSecure: true,
-		})
+			Level: "strict",
+		}, service.ConnectContext{UseSecure: true})
 		if err != nil {
 			writeJSONError(w, err)
 			return
@@ -368,8 +367,7 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 				Password: "password",
 				Roles:    &roles,
 			},
-			UseSecure: true,
-		})
+		}, service.ConnectContext{UseSecure: true})
 		if err != nil {
 			writeJSONError(w, err)
 			return
@@ -431,9 +429,8 @@ func (d *daemon) HttpSetupClusterEncryption(w http.ResponseWriter, r *http.Reque
 	}
 
 	err = s.SetupClusterEncryption(reqCtx, clusterID, service.SetupClusterEncryptionOptions{
-		Level:     reqData.Level,
-		UseSecure: useSecure,
-	})
+		Level: reqData.Level,
+	}, service.ConnectContext{UseSecure: useSecure})
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -553,13 +550,11 @@ func (d *daemon) HttpAddBucket(w http.ResponseWriter, r *http.Request) {
 		Name:           reqData.Name,
 		StorageMode:    reqData.StorageMode,
 		RamQuota:       reqData.RamQuota,
-		UseHostname:    reqData.UseHostname,
 		ReplicaCount:   reqData.ReplicaCount,
 		BucketType:     reqData.BucketType,
 		EvictionPolicy: reqData.EvictionPolicy,
 		StorageBackend: reqData.StorageBackend,
-		UseSecure:      meta.UseSecure,
-	})
+	}, service.ConnectContext{UseSecure: meta.UseSecure})
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -605,9 +600,7 @@ func (d *daemon) HttpAddSampleBucket(w http.ResponseWriter, r *http.Request) {
 
 	err = s.AddSampleBucket(reqCtx, clusterID, service.AddSampleOptions{
 		SampleBucket: reqData.SampleBucket,
-		UseHostname:  reqData.UseHostname,
-		UseSecure:    meta.UseSecure,
-	})
+	}, service.ConnectContext{UseSecure: meta.UseSecure})
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -652,11 +645,11 @@ func (d *daemon) HttpAddCollection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.AddCollection(reqCtx, clusterID, service.AddCollectionOptions{
-		Name:        reqData.Name,
-		ScopeName:   reqData.ScopeName,
-		BucketName:  reqData.BucketName,
-		UseHostname: reqData.UseHostname,
-		UseSecure:   meta.UseSecure,
+		Name:       reqData.Name,
+		ScopeName:  reqData.ScopeName,
+		BucketName: reqData.BucketName,
+	}, service.ConnectContext{
+		UseSecure: meta.UseSecure,
 	})
 	if err != nil {
 		writeJSONError(w, err)
@@ -746,9 +739,8 @@ func (d *daemon) HttpAddUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.AddUser(reqCtx, clusterID, service.AddUserOptions{
-		User:      reqData.User,
-		UseSecure: meta.UseSecure,
-	})
+		User: reqData.User,
+	}, service.ConnectContext{UseSecure: meta.UseSecure})
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -850,7 +842,7 @@ func (d *daemon) HttpSetupClientCertAuth(w http.ResponseWriter, r *http.Request)
 		UserName:  reqData.UserName,
 		UserEmail: reqData.UserEmail,
 		NumRoots:  numRoots,
-	})
+	}, service.ConnectContext{})
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -974,6 +966,7 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 		Timeout:        time.Now().Add(timeout),
 		Platform:       store.ClusterPlatformCloud,
 		CloudClusterID: cloudClusterID,
+		UseSecure:      true,
 	}
 	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
 		writeJSONError(w, err)
