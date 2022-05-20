@@ -38,20 +38,28 @@ type nodeJson struct {
 type V3StorageType string
 
 const (
-	V3StorageTypeGP3 V3StorageType = "GP3"
-	V3StorageTypeIO2 V3StorageType = "IO2"
+	V3StorageTypeGP3    V3StorageType = "GP3"
+	V3StorageTypeIO2    V3StorageType = "IO2"
+	V3StorageTypePD_SSD V3StorageType = "PD-SSD"
 )
-
-var defaultCompute = "m5.xlarge"
-var defaultRegion = "us-west-2"
 
 type V3ServersStorage struct {
 	Type V3StorageType `json:"type"`
-	IOPS uint32        `json:"IOPS"`
+	IOPS uint32        `json:"IOPS,omitempty"`
 	Size uint32        `json:"size"`
 }
 
-var defaultStorage = V3ServersStorage{
+var defaultComputeAWS = "m5.xlarge"
+var defaultRegionAWS = "us-east-2"
+var defaultProvider = V3ProviderAWS
+var defaultSingleAZ = true
+var defaultComputeGCP = "n2-standard-4"
+var defaultRegionGCP = "us-east1"
+var defaultStorageGCP = V3ServersStorage{
+	Type: V3StorageTypePD_SSD,
+	Size: 50,
+}
+var defaultStorageAWS = V3ServersStorage{
 	Type: V3StorageTypeGP3,
 	IOPS: 3000,
 	Size: 50,

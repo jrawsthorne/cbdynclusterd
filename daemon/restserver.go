@@ -949,7 +949,11 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 
 	clusterID := helper.NewRandomClusterID()
 	clusterOpts := cloud.ClusterSetupOptions{
-		Nodes: nodes,
+		Nodes:       nodes,
+		Environment: reqData.Environment,
+		Region:      reqData.Region,
+		Provider:    reqData.Provider,
+		SingleAZ:    reqData.SingleAZ,
 	}
 
 	cloudClusterID, err := d.cloudService.SetupCluster(reqCtx, clusterID, clusterOpts, helper.RestTimeout)
@@ -962,11 +966,12 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 
 	meta := store.ClusterMeta{
-		Owner:          dyncontext.ContextUser(reqCtx),
-		Timeout:        time.Now().Add(timeout),
-		Platform:       store.ClusterPlatformCloud,
-		CloudClusterID: cloudClusterID,
-		UseSecure:      true,
+		Owner:            dyncontext.ContextUser(reqCtx),
+		Timeout:          time.Now().Add(timeout),
+		Platform:         store.ClusterPlatformCloud,
+		CloudClusterID:   cloudClusterID,
+		UseSecure:        true,
+		CloudEnvironment: reqData.Environment,
 	}
 	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
 		writeJSONError(w, err)

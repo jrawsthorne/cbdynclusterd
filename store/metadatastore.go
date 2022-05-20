@@ -27,22 +27,42 @@ var (
 	}
 )
 
+type CloudEnvironment struct {
+	TenantID  string `json:"tenant_id"`
+	ProjectID string `json:"project_id"`
+	URL       string `json:"url"`
+	AccessKey string `json:"access_key"`
+	SecretKey string `json:"secret_key"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+}
+
+func (env CloudEnvironment) BaseURLPublic() string {
+	return fmt.Sprintf("https://cloudapi.%s", env.URL)
+}
+
+func (env CloudEnvironment) BaseURLInternal() string {
+	return fmt.Sprintf("https://api.%s", env.URL)
+}
+
 type ClusterMetaJSON struct {
-	Owner          string `json:"owner,omitempty"`
-	Timeout        string `json:"timeout,omitempty"`
-	Platform       string `json:"platform,omitempty"`
-	CloudClusterID string `json:"cloudClusterID,omitempty"`
-	UseSecure      bool   `json:"useSecure,omitempty"`
-	OS             string `json:"os,omitempty"`
+	Owner            string            `json:"owner,omitempty"`
+	Timeout          string            `json:"timeout,omitempty"`
+	Platform         string            `json:"platform,omitempty"`
+	CloudClusterID   string            `json:"cloudClusterID,omitempty"`
+	UseSecure        bool              `json:"useSecure,omitempty"`
+	OS               string            `json:"os,omitempty"`
+	CloudEnvironment *CloudEnvironment `json:"cloudEnvironment,omitempty"`
 }
 
 type ClusterMeta struct {
-	Owner          string
-	Timeout        time.Time
-	Platform       ClusterPlatform
-	CloudClusterID string
-	UseSecure      bool
-	OS             string
+	Owner            string
+	Timeout          time.Time
+	Platform         ClusterPlatform
+	CloudClusterID   string
+	UseSecure        bool
+	OS               string
+	CloudEnvironment *CloudEnvironment
 }
 
 type MetaDataStore struct {
@@ -65,12 +85,13 @@ func (store *ReadOnlyMetaDataStore) GetClusterMeta(clusterID string) (ClusterMet
 
 func (store *MetaDataStore) serializeMeta(meta ClusterMeta) ([]byte, error) {
 	metaJSON := ClusterMetaJSON{
-		Owner:          meta.Owner,
-		Timeout:        meta.Timeout.Format(time.RFC3339),
-		Platform:       string(meta.Platform),
-		CloudClusterID: meta.CloudClusterID,
-		UseSecure:      meta.UseSecure,
-		OS:             meta.OS,
+		Owner:            meta.Owner,
+		Timeout:          meta.Timeout.Format(time.RFC3339),
+		Platform:         string(meta.Platform),
+		CloudClusterID:   meta.CloudClusterID,
+		UseSecure:        meta.UseSecure,
+		OS:               meta.OS,
+		CloudEnvironment: meta.CloudEnvironment,
 	}
 
 	metaBytes, err := json.Marshal(metaJSON)
@@ -94,12 +115,13 @@ func (store *MetaDataStore) deserializeMeta(bytes []byte) (ClusterMeta, error) {
 	}
 
 	return ClusterMeta{
-		Owner:          metaJSON.Owner,
-		Timeout:        parsedTimeout,
-		Platform:       ClusterPlatform(metaJSON.Platform),
-		CloudClusterID: metaJSON.CloudClusterID,
-		UseSecure:      metaJSON.UseSecure,
-		OS:             metaJSON.OS,
+		Owner:            metaJSON.Owner,
+		Timeout:          parsedTimeout,
+		Platform:         ClusterPlatform(metaJSON.Platform),
+		CloudClusterID:   metaJSON.CloudClusterID,
+		UseSecure:        metaJSON.UseSecure,
+		OS:               metaJSON.OS,
+		CloudEnvironment: metaJSON.CloudEnvironment,
 	}, nil
 }
 

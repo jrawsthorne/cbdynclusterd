@@ -10,6 +10,7 @@ import (
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
+	"github.com/couchbaselabs/cbdynclusterd/store"
 )
 
 func jsonifyCluster(cluster *cluster.Cluster) ClusterJSON {
@@ -252,8 +253,12 @@ type BuildImageResponseJSON struct {
 }
 
 type CreateCloudClusterJSON struct {
-	Timeout  string   `json:"timeout"`
-	Services []string `json:"services"`
+	Timeout     string                  `json:"timeout"`
+	Services    []string                `json:"services"`
+	Environment *store.CloudEnvironment `json:"environment,omitempty"`
+	Region      string                  `json:"region"`
+	Provider    string                  `json:"provider"`
+	SingleAZ    *bool                   `json:"single_az,omitempty"`
 }
 
 type AddIPJSON struct {
