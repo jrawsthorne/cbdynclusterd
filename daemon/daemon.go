@@ -42,8 +42,11 @@ var (
 	aliasRepoPath             = helper.AliasRepoPath
 	cloudAccessKey            = ""
 	cloudPrivateKey           = ""
-	cloudURL                  = "https://cloudapi.cloud.couchbase.com"
+	cloudURL                  = ""
 	cloudProjectID            = ""
+	cloudTenantID             = ""
+	cloudUsername             = ""
+	cloudPassword             = ""
 	ec2SecurityGroup          = ""
 	ec2KeyName                = ""
 	ec2DownloadPassword       = ""
@@ -54,7 +57,8 @@ var (
 
 	cfgFileFlag string
 	dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag, cloudAccessKeyFlag, cloudPrivateKeyFlag,
-	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag, ec2KeyPathFlag, ec2DomainNameFlag, ec2HostedZoneIdFlag string
+	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag, ec2KeyPathFlag, ec2DomainNameFlag, ec2HostedZoneIdFlag,
+	cloudTenantIDFlag, cloudUsernameFlag, cloudPasswordFlag, cloudURLFlag string
 	dockerPortFlag, dockerMaxContainersFlag int32
 )
 
@@ -85,9 +89,13 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&dockerHostFlag, "docker-host", dockerHost, "docker host where containers are running (i.e. tcp://127.0.0.1:2376)")
 	rootCmd.PersistentFlags().StringVar(&dnsSvcHostFlag, "dns-host", dnsSvcHost, "Restful DNS server IP")
 	rootCmd.PersistentFlags().StringVar(&aliasRepoPathFlag, "alias-repo", aliasRepoPath, "Path to the alias repo")
-	rootCmd.PersistentFlags().StringVar(&cloudAccessKeyFlag, "cloud-access-key", "", "Access key to use for cloud requests")
-	rootCmd.PersistentFlags().StringVar(&cloudPrivateKeyFlag, "cloud-private-key", "", "Private key to use for cloud requests")
+	rootCmd.PersistentFlags().StringVar(&cloudURLFlag, "cloud-url", "", "URL for cloud apis")
+	rootCmd.PersistentFlags().StringVar(&cloudAccessKeyFlag, "cloud-access-key", "", "Access key to use for cloud public api")
+	rootCmd.PersistentFlags().StringVar(&cloudPrivateKeyFlag, "cloud-private-key", "", "Private key to use for cloud public api")
 	rootCmd.PersistentFlags().StringVar(&cloudProjectIDFlag, "cloud-project-id", "", "Project ID to use for cloud")
+	rootCmd.PersistentFlags().StringVar(&cloudTenantIDFlag, "cloud-tenant-id", "", "Tenant ID to use for cloud internal api")
+	rootCmd.PersistentFlags().StringVar(&cloudUsernameFlag, "cloud-username", "", "Username to use for cloud internal api")
+	rootCmd.PersistentFlags().StringVar(&cloudPasswordFlag, "cloud-password", "", "Password to use for cloud internal api")
 	rootCmd.PersistentFlags().StringVar(&ec2KeyNameFlag, "ec2-key-name", "", "SSH key name to use when creating ec2 instances")
 	rootCmd.PersistentFlags().StringVar(&ec2SecurityGroupFlag, "ec2-security-group", "", "Security group to use when creating ec2 instances")
 	rootCmd.PersistentFlags().StringVar(&ec2DownloadPasswordFlag, "ec2-download-password", "", "Password used to download builds from outside the vpn")
@@ -148,9 +156,13 @@ func initConfig() {
 	dockerPortFlag = getInt32Arg("docker-port")
 	dnsSvcHostFlag = getStringArg("dns-host")
 	aliasRepoPathFlag = getStringArg("alias-repo")
+	cloudURLFlag = getStringArg("cloud-url")
 	cloudAccessKeyFlag = getStringArg("cloud-access-key")
 	cloudPrivateKeyFlag = getStringArg("cloud-private-key")
 	cloudProjectIDFlag = getStringArg("cloud-project-id")
+	cloudTenantIDFlag = getStringArg("cloud-tenant-id")
+	cloudUsernameFlag = getStringArg("cloud-username")
+	cloudPasswordFlag = getStringArg("cloud-password")
 	ec2SecurityGroupFlag = getStringArg("ec2-security-group")
 	ec2KeyNameFlag = getStringArg("ec2-key-name")
 	ec2DownloadPasswordFlag = getStringArg("ec2-download-password")
@@ -163,9 +175,13 @@ func initConfig() {
 	dockerHost = dockerHostFlag
 	dnsSvcHost = dnsSvcHostFlag
 	aliasRepoPath = aliasRepoPathFlag
+	cloudURL = cloudURLFlag
 	cloudAccessKey = cloudAccessKeyFlag
 	cloudPrivateKey = cloudPrivateKeyFlag
 	cloudProjectID = cloudProjectIDFlag
+	cloudTenantID = cloudTenantIDFlag
+	cloudUsername = cloudUsernameFlag
+	cloudPassword = cloudPasswordFlag
 	ec2SecurityGroup = ec2SecurityGroupFlag
 	ec2KeyName = ec2KeyNameFlag
 	ec2DownloadPassword = ec2DownloadPasswordFlag
@@ -354,7 +370,7 @@ func newDaemon() *daemon {
 
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
 	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, dockerMaxContainers, readOnlyStore)
-	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudProjectID, cloudURL, readOnlyStore)
+	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudProjectID, cloudTenantID, cloudUsername, cloudPassword, cloudURL, readOnlyStore)
 	d.ec2Service = ec2.NewEC2Service(&ec2.EC2ServiceOptions{
 		AliasRepoPath:    aliasRepoPath,
 		SecurityGroup:    ec2SecurityGroup,

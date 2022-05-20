@@ -46,6 +46,7 @@ const (
 	SshPass                  = "couchbase"
 	RestUser                 = "Administrator"
 	RestPass                 = "password"
+	RestPassCapella          = "P@ssword1"
 	BucketCouchbase          = "membase"
 	BucketMemcached          = "memcached"
 	BucketEphemeral          = "ephemeral"
