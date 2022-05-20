@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/couchbaselabs/cbdynclusterd/store"
 )
 
 // Totally not stolen from https://github.com/couchbasecloud/rest-api-examples/blob/main/go/client/client.go
@@ -26,29 +28,16 @@ const (
 )
 
 type client struct {
-	baseURLPublic   string
-	baseURLInternal string
-	access          string
-	secret          string
-	username        string
-	password        string
-	httpClient      *http.Client
+	httpClient *http.Client
 
-	jwt string
-	mu  sync.Mutex
+	jwts map[string]map[string]string
+	mu   sync.Mutex
 }
 
-func NewClient(baseURL, access, secret, username, password string) *client {
-	baseURLPublic := fmt.Sprintf("https://cloudapi.%s", baseURL)
-	baseURLInternal := fmt.Sprintf("https://api.%s", baseURL)
+func NewClient() *client {
 	return &client{
-		baseURLPublic:   baseURLPublic,
-		baseURLInternal: baseURLInternal,
-		access:          access,
-		secret:          secret,
-		httpClient:      http.DefaultClient,
-		username:        username,
-		password:        password,
+		httpClient: http.DefaultClient,
+		jwts:       make(map[string]map[string]string),
 	}
 }
 
@@ -74,8 +63,8 @@ func (c *client) createRequest(ctx context.Context, method, uri string, body int
 	return r, nil
 }
 
-func (c *client) Do(ctx context.Context, method, uri string, body interface{}) (*http.Response, error) {
-	r, err := c.createRequest(ctx, method, c.baseURLPublic+uri, body)
+func (c *client) Do(ctx context.Context, method, uri string, body interface{}, env *store.CloudEnvironment) (*http.Response, error) {
+	r, err := c.createRequest(ctx, method, env.BaseURLPublic()+uri, body)
 	if err != nil {
 		return nil, err
 	}
@@ -84,22 +73,22 @@ func (c *client) Do(ctx context.Context, method, uri string, body interface{}) (
 	r.Header.Add(headerKeyTimestamp, now)
 
 	payload := strings.Join([]string{method, uri, now}, "\n")
-	h := hmac.New(sha256.New, []byte(c.secret))
+	h := hmac.New(sha256.New, []byte(env.SecretKey))
 	h.Write([]byte(payload))
 
-	bearer := "Bearer " + c.access + ":" + base64.StdEncoding.EncodeToString(h.Sum(nil))
+	bearer := "Bearer " + env.AccessKey + ":" + base64.StdEncoding.EncodeToString(h.Sum(nil))
 	r.Header.Add(headerKeyAuthorization, bearer)
 
 	return c.httpClient.Do(r)
 }
 
-func (c *client) doInternal(ctx context.Context, method, uri string, body interface{}, forceRefreshJwt bool) (*http.Response, error) {
-	r, err := c.createRequest(ctx, method, c.baseURLInternal+uri, body)
+func (c *client) doInternal(ctx context.Context, method, uri string, body interface{}, forceRefreshJwt bool, env *store.CloudEnvironment) (*http.Response, error) {
+	r, err := c.createRequest(ctx, method, env.BaseURLInternal()+uri, body)
 	if err != nil {
 		return nil, err
 	}
 
-	jwt, err := c.getJwt(ctx, forceRefreshJwt)
+	jwt, err := c.fetchJwt(ctx, env, forceRefreshJwt)
 	if err != nil {
 		return nil, err
 	}
@@ -114,27 +103,46 @@ func (c *client) doInternal(ctx context.Context, method, uri string, body interf
 
 	// If we force refresh jwt and still get auth error then the credentials are probably wrong so prevent looping forever
 	if resp.StatusCode == 401 && !forceRefreshJwt {
-		return c.doInternal(ctx, method, uri, body, true)
+		return c.doInternal(ctx, method, uri, body, true, env)
 	}
 
 	return resp, nil
 }
 
-func (c *client) DoInternal(ctx context.Context, method, uri string, body interface{}) (*http.Response, error) {
-	return c.doInternal(ctx, method, uri, body, false)
+func (c *client) DoInternal(ctx context.Context, method, uri string, body interface{}, env *store.CloudEnvironment) (*http.Response, error) {
+	return c.doInternal(ctx, method, uri, body, false, env)
 }
 
-func (c *client) getJwt(ctx context.Context, forceRefresh bool) (string, error) {
+// Lock must be held
+func (c *client) setJwt(env *store.CloudEnvironment, jwt string) {
+	if tenant, ok := c.jwts[env.TenantID]; ok {
+		tenant[env.ProjectID] = jwt
+	} else {
+		c.jwts[env.TenantID] = map[string]string{
+			env.ProjectID: jwt,
+		}
+	}
+}
+
+// Lock must be held
+func (c *client) getJwt(env *store.CloudEnvironment) string {
+	if tenant, exists := c.jwts[env.TenantID]; exists {
+		return tenant[env.ProjectID]
+	}
+	return ""
+}
+
+func (c *client) fetchJwt(ctx context.Context, env *store.CloudEnvironment, forceRefresh bool) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.jwt == "" || forceRefresh {
-		r, err := c.createRequest(ctx, "POST", c.baseURLInternal+sessionsPath, nil)
+	if c.getJwt(env) == "" || forceRefresh {
+		r, err := c.createRequest(ctx, "POST", env.BaseURLInternal()+sessionsPath, nil)
 		if err != nil {
 			return "", err
 		}
 
-		r.SetBasicAuth(c.username, c.password)
+		r.SetBasicAuth(env.Username, env.Password)
 
 		res, err := c.httpClient.Do(r)
 		if err != nil {
@@ -159,8 +167,8 @@ func (c *client) getJwt(ctx context.Context, forceRefresh bool) (string, error) 
 			return "", err
 		}
 
-		c.jwt = respBody.Jwt
+		c.setJwt(env, respBody.Jwt)
 	}
 
-	return c.jwt, nil
+	return c.getJwt(env), nil
 }

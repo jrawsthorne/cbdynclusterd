@@ -2,6 +2,8 @@ package cloud
 
 import (
 	"errors"
+
+	"github.com/couchbaselabs/cbdynclusterd/store"
 )
 
 type NodeSetupOptions struct {
@@ -10,7 +12,11 @@ type NodeSetupOptions struct {
 }
 
 type ClusterSetupOptions struct {
-	Nodes []NodeSetupOptions
+	Nodes       []NodeSetupOptions
+	Environment *store.CloudEnvironment
+	Region      string
+	Provider    string
+	SingleAZ    *bool
 }
 
 func ParseServiceName(service string) (V3CouchbaseService, error) {

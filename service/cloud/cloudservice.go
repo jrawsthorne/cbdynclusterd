@@ -20,26 +20,32 @@ import (
 )
 
 type CloudService struct {
-	projectID string
-	tenantID  string
-	enabled   bool
-	client    *client
-	metaStore *store.ReadOnlyMetaDataStore
+	defaultEnv *store.CloudEnvironment
+	enabled    bool
+	client     *client
+	metaStore  *store.ReadOnlyMetaDataStore
 }
 
 func NewCloudService(accessKey, privateKey, projectID, tenantID, username, password, baseURL string, metaStore *store.ReadOnlyMetaDataStore) *CloudService {
 	log.Printf("Cloud enabled: %t", projectID != "")
 	return &CloudService{
-		enabled:   projectID != "",
-		projectID: projectID,
-		tenantID:  tenantID,
-		client:    NewClient(baseURL, accessKey, privateKey, username, password),
+		enabled: projectID != "" && tenantID != "" && username != "" && password != "" && baseURL != "" && accessKey != "" && privateKey != "",
+		defaultEnv: &store.CloudEnvironment{
+			TenantID:  tenantID,
+			ProjectID: projectID,
+			URL:       baseURL,
+			AccessKey: accessKey,
+			SecretKey: privateKey,
+			Username:  username,
+			Password:  password,
+		},
+		client:    NewClient(),
 		metaStore: metaStore,
 	}
 }
 
-func (cs *CloudService) getCluster(ctx context.Context, cloudClusterID string) (*getClusterJSON, error) {
-	res, err := cs.client.Do(ctx, "GET", getClusterPath+cloudClusterID, nil)
+func (cs *CloudService) getCluster(ctx context.Context, cloudClusterID string, env *store.CloudEnvironment) (*getClusterJSON, error) {
+	res, err := cs.client.Do(ctx, "GET", getClusterPath+cloudClusterID, nil, env)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +71,7 @@ func (cs *CloudService) getCluster(ctx context.Context, cloudClusterID string) (
 	return &respBody, nil
 }
 
-func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID string, opts service.AddBucketOptions) error {
+func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID string, opts service.AddBucketOptions, env *store.CloudEnvironment) error {
 	log.Printf("Running cloud CreateBucket for %s: %s", clusterID, cloudClusterID)
 
 	body := bucketSpecJSON{
@@ -76,7 +82,7 @@ func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID
 		DurabilityLevel:   "none",
 	}
 
-	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(createBucketPath, cs.tenantID, cs.projectID, cloudClusterID), body)
+	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(createBucketPath, env.TenantID, env.ProjectID, cloudClusterID), body, env)
 	if err != nil {
 		return err
 	}
@@ -92,7 +98,7 @@ func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID
 	return nil
 }
 
-func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip string) error {
+func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip string, env *store.CloudEnvironment) error {
 	log.Printf("Running cloud AddIP for %s: %s", clusterID, cloudClusterID)
 
 	body := allowListBulkJSON{
@@ -103,7 +109,7 @@ func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip
 		},
 	}
 
-	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(addIPPath, cs.tenantID, cs.projectID, cloudClusterID), body)
+	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(addIPPath, env.TenantID, env.ProjectID, cloudClusterID), body, env)
 	if err != nil {
 		return err
 	}
@@ -117,7 +123,7 @@ func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip
 		// AV-35851: Cluster randomly goes into deploying state after adding IP
 		if strings.Contains(errorBody, "ErrClusterStateNotNormal") {
 			time.Sleep(time.Second * 5)
-			return cs.addIP(ctx, clusterID, cloudClusterID, ip)
+			return cs.addIP(ctx, clusterID, cloudClusterID, ip, env)
 		}
 		return fmt.Errorf("add ip failed: %s", string(bb))
 	}
@@ -125,10 +131,10 @@ func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip
 	return nil
 }
 
-func (cs *CloudService) killCluster(ctx context.Context, clusterID, cloudClusterID string) error {
+func (cs *CloudService) killCluster(ctx context.Context, clusterID, cloudClusterID string, env *store.CloudEnvironment) error {
 	log.Printf("Running cloud KillCluster for %s: %s", clusterID, cloudClusterID)
 
-	res, err := cs.client.Do(ctx, "DELETE", deleteClusterPath+cloudClusterID, nil)
+	res, err := cs.client.Do(ctx, "DELETE", deleteClusterPath+cloudClusterID, nil, env)
 	if err != nil {
 		return err
 	}
@@ -146,7 +152,7 @@ func (cs *CloudService) killCluster(ctx context.Context, clusterID, cloudCluster
 	return nil
 }
 
-func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID string, user *helper.UserOption) error {
+func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID string, user *helper.UserOption, env *store.CloudEnvironment) error {
 	log.Printf("Running cloud AddUser for %s: %s", clusterID, cloudClusterID)
 
 	var u databaseUserJSON
@@ -156,7 +162,7 @@ func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID s
 		u = newDatabaseUser(user.Name, user.Password)
 	}
 
-	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(createUserPath, cs.tenantID, cs.projectID, cloudClusterID), u)
+	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(createUserPath, env.TenantID, env.ProjectID, cloudClusterID), u, env)
 	if err != nil {
 		return err
 	}
@@ -179,10 +185,10 @@ func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID s
 	return nil
 }
 
-func (cs *CloudService) bucketHealth(ctx context.Context, clusterID, cloudClusterID, bucket string) (string, error) {
+func (cs *CloudService) bucketHealth(ctx context.Context, clusterID, cloudClusterID, bucket string, env *store.CloudEnvironment) (string, error) {
 	log.Printf("Running cloud bucket health for %s: %s", clusterID, cloudClusterID)
 
-	res, err := cs.client.Do(ctx, "GET", fmt.Sprintf(clustersHealthPath, cloudClusterID), nil)
+	res, err := cs.client.Do(ctx, "GET", fmt.Sprintf(clustersHealthPath, cloudClusterID), nil, env)
 	if err != nil {
 		return "", err
 	}
@@ -229,14 +235,19 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 		return nil, errors.New("unknown cluster")
 	}
 
+	env := meta.CloudEnvironment
+	if env == nil {
+		env = cs.defaultEnv
+	}
+
 	log.Printf("Running cloud GetCluster for %s: %s", clusterID, meta.CloudClusterID)
 
-	c, err := cs.getCluster(ctx, meta.CloudClusterID)
+	c, err := cs.getCluster(ctx, meta.CloudClusterID, env)
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := cs.client.DoInternal(ctx, "GET", fmt.Sprintf(getNodesPath, cs.tenantID, cs.projectID, meta.CloudClusterID), nil)
+	res, err := cs.client.DoInternal(ctx, "GET", fmt.Sprintf(getNodesPath, env.TenantID, env.ProjectID, meta.CloudClusterID), nil, env)
 	if err != nil {
 		return nil, err
 	}
@@ -287,12 +298,12 @@ func (cs *CloudService) AddUser(ctx context.Context, clusterID string, opts serv
 		return ErrCloudNotEnabled
 	}
 
-	cloudClusterID, err := cs.getCloudClusterID(ctx, clusterID)
+	cloudClusterID, env, err := cs.getCloudClusterEnv(ctx, clusterID)
 	if err != nil {
 		return err
 	}
 
-	return cs.addUser(ctx, clusterID, cloudClusterID, opts.User)
+	return cs.addUser(ctx, clusterID, cloudClusterID, opts.User, env)
 }
 
 func (cs *CloudService) AddIP(ctx context.Context, clusterID, ip string) error {
@@ -300,12 +311,12 @@ func (cs *CloudService) AddIP(ctx context.Context, clusterID, ip string) error {
 		return ErrCloudNotEnabled
 	}
 
-	cloudClusterID, err := cs.getCloudClusterID(ctx, clusterID)
+	cloudClusterID, env, err := cs.getCloudClusterEnv(ctx, clusterID)
 	if err != nil {
 		return err
 	}
 
-	return cs.addIP(ctx, clusterID, cloudClusterID, ip)
+	return cs.addIP(ctx, clusterID, cloudClusterID, ip, env)
 }
 
 func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster, error) {
@@ -316,7 +327,8 @@ func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster,
 	log.Printf("Running cloud GetAllClusters")
 
 	// TODO: Implement pagination
-	res, err := cs.client.Do(ctx, "GET", getAllClustersPath+fmt.Sprintf("?perPage=1000&projectId=%s", cs.projectID), nil)
+	// TODO: Support listing get all clusters across custom environments
+	res, err := cs.client.Do(ctx, "GET", getAllClustersPath+fmt.Sprintf("?perPage=1000&projectId=%s", cs.defaultEnv.ProjectID), nil, cs.defaultEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -362,12 +374,12 @@ func (cs *CloudService) KillCluster(ctx context.Context, clusterID string) error
 		return ErrCloudNotEnabled
 	}
 
-	cloudClusterID, err := cs.getCloudClusterID(ctx, clusterID)
+	cloudClusterID, env, err := cs.getCloudClusterEnv(ctx, clusterID)
 	if err != nil {
 		return err
 	}
 
-	return cs.killCluster(ctx, clusterID, cloudClusterID)
+	return cs.killCluster(ctx, clusterID, cloudClusterID, env)
 }
 
 func (cs *CloudService) KillAllClusters(ctx context.Context) error {
@@ -432,25 +444,73 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 
 	log.Printf("Running SetupCluster for %s with %v", clusterID, opts.Nodes)
 
+	env := opts.Environment
+	if env == nil {
+		env = cs.defaultEnv
+	}
+
+	provider := defaultProvider
+	if opts.Provider != "" {
+		switch opts.Provider {
+		case "aws":
+			provider = V3ProviderAWS
+		case "gcp":
+			provider = V3ProviderGCP
+		default:
+			return "", fmt.Errorf("provider %s is not supported", opts.Provider)
+		}
+	}
+
+	region := opts.Region
+	if region == "" {
+		switch provider {
+		case V3ProviderAWS:
+			region = defaultRegionAWS
+		case V3ProviderGCP:
+			region = defaultRegionGCP
+		}
+	}
+
+	singleAZ := defaultSingleAZ
+	if opts.SingleAZ != nil {
+		singleAZ = *opts.SingleAZ
+	}
+
+	var compute string
+	switch provider {
+	case V3ProviderAWS:
+		compute = defaultComputeAWS
+	case V3ProviderGCP:
+		compute = defaultComputeGCP
+	}
+
+	var storage V3ServersStorage
+	switch provider {
+	case V3ProviderAWS:
+		storage = defaultStorageAWS
+	case V3ProviderGCP:
+		storage = defaultStorageGCP
+	}
+
 	var servers []V3Server
 	for _, node := range opts.Nodes {
 		servers = append(servers, V3Server{
 			Size:     node.Size,
-			Compute:  defaultCompute,
+			Compute:  compute,
 			Services: node.Services,
-			Storage:  defaultStorage,
+			Storage:  storage,
 		})
 	}
 
 	body := setupClusterJson{
 		Environment: V3EnvironmentHosted,
 		Name:        clusterID,
-		ProjectID:   cs.projectID,
+		ProjectID:   env.ProjectID,
 		Place: V3Place{
-			SingleAZ: true,
+			SingleAZ: singleAZ,
 			Hosted: V3PlaceHosted{
-				Provider: V3ProviderAWS,
-				Region:   defaultRegion,
+				Provider: provider,
+				Region:   region,
 				CIDR:     generateCIDR(),
 			},
 		},
@@ -461,7 +521,7 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	reqCtx, cancel := context.WithDeadline(ctx, time.Now().Add(maxRequestTimeout))
 	defer cancel()
 
-	res, err := cs.client.Do(reqCtx, "POST", createClusterPath, body)
+	res, err := cs.client.Do(reqCtx, "POST", createClusterPath, body, env)
 	if err != nil {
 		return "", err
 	}
@@ -490,11 +550,11 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		getReqCtx, cancel := context.WithDeadline(tCtx, time.Now().Add(maxRequestTimeout))
 
 		// If the tCtx deadline expires then this return an error.
-		c, err := cs.getCluster(getReqCtx, cloudClusterID)
+		c, err := cs.getCluster(getReqCtx, cloudClusterID, env)
 		cancel()
 		if err != nil {
 			go func() {
-				cs.killCluster(ctx, clusterID, cloudClusterID)
+				cs.killCluster(ctx, clusterID, cloudClusterID, env)
 			}()
 			return "", err
 		}
@@ -515,17 +575,17 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		Name:     helper.RestUser,
 		Password: helper.RestPassCapella,
 	}
-	if err := cs.addUser(ctx, clusterID, cloudClusterID, defaultUser); err != nil {
+	if err := cs.addUser(ctx, clusterID, cloudClusterID, defaultUser, env); err != nil {
 		go func() {
-			cs.killCluster(ctx, clusterID, cloudClusterID)
+			cs.killCluster(ctx, clusterID, cloudClusterID, env)
 		}()
 		return "", err
 	}
 
 	// allow all ips, these are only temporary, non security sensitive clusters so it's fine
-	if err := cs.addIP(ctx, clusterID, cloudClusterID, "0.0.0.0/0"); err != nil {
+	if err := cs.addIP(ctx, clusterID, cloudClusterID, "0.0.0.0/0", env); err != nil {
 		go func() {
-			cs.killCluster(ctx, clusterID, cloudClusterID)
+			cs.killCluster(ctx, clusterID, cloudClusterID, env)
 		}()
 		return "", err
 	}
@@ -538,12 +598,12 @@ func (cs *CloudService) AddBucket(ctx context.Context, clusterID string, opts se
 		return ErrCloudNotEnabled
 	}
 
-	cloudClusterID, err := cs.getCloudClusterID(ctx, clusterID)
+	cloudClusterID, env, err := cs.getCloudClusterEnv(ctx, clusterID)
 	if err != nil {
 		return err
 	}
 
-	return cs.addBucket(ctx, clusterID, cloudClusterID, opts)
+	return cs.addBucket(ctx, clusterID, cloudClusterID, opts, env)
 }
 
 func (cs *CloudService) AddCollection(ctx context.Context, clusterID string, opts service.AddCollectionOptions, connCtx service.ConnectContext) error {
@@ -561,14 +621,14 @@ func (cs *CloudService) SetupCertAuth(ctx context.Context, clusterID string, opt
 	return nil, errors.New("unsupported operation")
 }
 
-func (cs *CloudService) addSampleBucket(ctx context.Context, clusterID, cloudClusterID, name string, connCtx service.ConnectContext) error {
+func (cs *CloudService) addSampleBucket(ctx context.Context, clusterID, cloudClusterID, name string, connCtx service.ConnectContext, env *store.CloudEnvironment) error {
 	log.Printf("Running cloud AddSampleBucket for %s: %s", clusterID, cloudClusterID)
 
 	body := addSampleBucketJSON{
 		Name: name,
 	}
 
-	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(addSampleBucketPath, cs.tenantID, cs.projectID, cloudClusterID), body)
+	res, err := cs.client.DoInternal(ctx, "POST", fmt.Sprintf(addSampleBucketPath, env.TenantID, env.ProjectID, cloudClusterID), body, env)
 	if err != nil {
 		return err
 	}
@@ -600,14 +660,14 @@ func (cs *CloudService) AddSampleBucket(ctx context.Context, clusterID string, o
 		return ErrCloudNotEnabled
 	}
 
-	cloudClusterID, err := cs.getCloudClusterID(ctx, clusterID)
+	cloudClusterID, env, err := cs.getCloudClusterEnv(ctx, clusterID)
 	if err != nil {
 		return err
 	}
 
 	connCtx.RestPassword = helper.RestPassCapella
 
-	return cs.addSampleBucket(ctx, clusterID, cloudClusterID, opts.SampleBucket, connCtx)
+	return cs.addSampleBucket(ctx, clusterID, cloudClusterID, opts.SampleBucket, connCtx, env)
 }
 
 func (cs *CloudService) SetupClusterEncryption(ctx context.Context, clusterID string, opts service.SetupClusterEncryptionOptions, connCtx service.ConnectContext) error {
@@ -630,17 +690,22 @@ func (cs *CloudService) ConnString(ctx context.Context, clusterID string, useSSL
 	return "couchbases://" + c.EntryPoint, nil
 }
 
-func (cs *CloudService) getCloudClusterID(ctx context.Context, clusterID string) (string, error) {
+func (cs *CloudService) getCloudClusterEnv(ctx context.Context, clusterID string) (string, *store.CloudEnvironment, error) {
 	meta, err := cs.metaStore.GetClusterMeta(clusterID)
 	if err != nil {
 		log.Printf("Encountered unregistered cluster: %s", clusterID)
-		return "", err
+		return "", nil, err
 	}
 
 	if meta.CloudClusterID == "" {
 		log.Printf("Encountered cluster with no cloud cluster ID: %s", clusterID)
-		return "", errors.New("unknown cluster")
+		return "", nil, errors.New("unknown cluster")
 	}
 
-	return meta.CloudClusterID, nil
+	env := meta.CloudEnvironment
+	if env == nil {
+		env = cs.defaultEnv
+	}
+
+	return meta.CloudClusterID, env, nil
 }
