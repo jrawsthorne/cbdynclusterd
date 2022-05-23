@@ -513,9 +513,10 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		return "", err
 	}
 
-	// TODO: Should we open to the world?
-	if err := cs.addIP(ctx, clusterID, cloudClusterID, "0.0.0.0/0"); err != nil {
-		return "", nil
+	for _, ip := range cidrAllowlist {
+		if err := cs.addIP(ctx, clusterID, cloudClusterID, ip); err != nil {
+			return "", err
+		}
 	}
 
 	return cloudClusterID, nil
