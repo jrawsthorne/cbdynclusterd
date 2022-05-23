@@ -26,3 +26,8 @@ const (
 	clusterDraft            = "draft"
 	clusterDeploymentFailed = "deploymentFailed"
 )
+
+var (
+	// Public VPN IPs taken from Capella codebase
+	cidrAllowlist = []string{"12.145.26.240/29", "12.235.169.89/30", "32.142.206.162/30", "64.124.71.194/29", "67.212.150.204/27"}
+)
