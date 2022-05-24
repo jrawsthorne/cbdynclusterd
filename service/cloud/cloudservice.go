@@ -113,6 +113,12 @@ func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip
 		if err != nil {
 			return fmt.Errorf("add ip failed: reason could not be determined: %v", err)
 		}
+		errorBody := string(bb)
+		// AV-35851: Cluster randomly goes into deploying state after adding IP
+		if strings.Contains(errorBody, "ErrClusterStateNotNormal") {
+			time.Sleep(time.Second * 5)
+			return cs.addIP(ctx, clusterID, cloudClusterID, ip)
+		}
 		return fmt.Errorf("add ip failed: %s", string(bb))
 	}
 
