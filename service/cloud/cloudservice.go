@@ -510,11 +510,17 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		Password: helper.RestPassCapella,
 	}
 	if err := cs.addUser(ctx, clusterID, cloudClusterID, defaultUser); err != nil {
+		go func() {
+			cs.killCluster(ctx, clusterID, cloudClusterID)
+		}()
 		return "", err
 	}
 
 	for _, ip := range cidrAllowlist {
 		if err := cs.addIP(ctx, clusterID, cloudClusterID, ip); err != nil {
+			go func() {
+				cs.killCluster(ctx, clusterID, cloudClusterID)
+			}()
 			return "", err
 		}
 	}
