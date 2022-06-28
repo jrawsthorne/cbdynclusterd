@@ -92,6 +92,11 @@ func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID
 		if err != nil {
 			return fmt.Errorf("create bucket failed: reason could not be determined: %v", err)
 		}
+		errorBody := string(bb)
+		// AV-35851: Cluster randomly goes into deploying state after adding IP
+		if strings.Contains(errorBody, "ErrClusterStateNotNormal") {
+			return cs.addBucket(ctx, clusterID, cloudClusterID, opts, env)
+		}
 		return fmt.Errorf("create bucket failed: %s", string(bb))
 	}
 
