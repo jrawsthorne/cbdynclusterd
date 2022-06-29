@@ -35,6 +35,10 @@ type CloudEnvironment struct {
 	SecretKey string `json:"secret_key"`
 	Username  string `json:"username"`
 	Password  string `json:"password"`
+	// Used when deploying with custom AMI
+	OverrideToken string `json:"override_token"`
+	Image         string `json:"image"`
+	ServerVersion string `json:"server_version"`
 }
 
 func (env CloudEnvironment) BaseURLPublic() string {

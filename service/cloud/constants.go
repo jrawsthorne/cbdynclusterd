@@ -2,7 +2,6 @@ package cloud
 
 const (
 	// public API
-	createClusterPath  = "/v3/clusters"
 	deleteClusterPath  = "/v3/clusters/"
 	getClusterPath     = "/v3/clusters/"
 	getAllClustersPath = "/v3/clusters"
@@ -11,7 +10,9 @@ const (
 	clustersHealthPath = "/v3/clusters/%s/health"
 
 	// internal API
-	internalBasePath    = "/v2/organizations/%s/projects/%s/clusters/%s"
+	internalBasePath = "/v2/organizations/%s/projects/%s/clusters/%s"
+	// Need to use /deploy to use custom image
+	createClusterPath   = "/v2/organizations/%s/clusters/deploy"
 	createBucketPath    = internalBasePath + "/buckets"
 	addIPPath           = internalBasePath + "/allowlists-bulk"
 	addSampleBucketPath = internalBasePath + "/buckets/samples"
