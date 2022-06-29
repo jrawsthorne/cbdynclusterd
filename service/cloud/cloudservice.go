@@ -458,9 +458,9 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	if opts.Provider != "" {
 		switch opts.Provider {
 		case "aws":
-			provider = V3ProviderAWS
+			provider = ProviderHostedAWS
 		case "gcp":
-			provider = V3ProviderGCP
+			provider = ProviderHostedGCP
 		default:
 			return "", fmt.Errorf("provider %s is not supported", opts.Provider)
 		}
@@ -469,9 +469,9 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	region := opts.Region
 	if region == "" {
 		switch provider {
-		case V3ProviderAWS:
+		case ProviderHostedAWS:
 			region = defaultRegionAWS
-		case V3ProviderGCP:
+		case ProviderHostedGCP:
 			region = defaultRegionGCP
 		}
 	}
@@ -481,52 +481,65 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		singleAZ = *opts.SingleAZ
 	}
 
-	var compute string
+	var compute Instance
 	switch provider {
-	case V3ProviderAWS:
+	case ProviderHostedAWS:
 		compute = defaultComputeAWS
-	case V3ProviderGCP:
+	case ProviderHostedGCP:
 		compute = defaultComputeGCP
 	}
 
-	var storage V3ServersStorage
+	var disk Disk
 	switch provider {
-	case V3ProviderAWS:
-		storage = defaultStorageAWS
-	case V3ProviderGCP:
-		storage = defaultStorageGCP
+	case ProviderHostedAWS:
+		disk = defaultDiskAWS
+	case ProviderHostedGCP:
+		disk = defaultDiskeGCP
 	}
 
-	var servers []V3Server
+	var specs []Spec
 	for _, node := range opts.Nodes {
-		servers = append(servers, V3Server{
-			Size:     node.Size,
+		services := []Service{}
+		for _, service := range node.Services {
+			services = append(services, Service{
+				Type: service,
+			})
+		}
+		specs = append(specs, Spec{
+			Count:    node.Size,
+			Services: services,
 			Compute:  compute,
-			Services: node.Services,
-			Storage:  storage,
+			Disk:     disk,
 		})
 	}
 
 	body := setupClusterJson{
-		Environment: V3EnvironmentHosted,
-		Name:        clusterID,
-		ProjectID:   env.ProjectID,
-		Place: V3Place{
-			SingleAZ: singleAZ,
-			Hosted: V3PlaceHosted{
-				Provider: provider,
-				Region:   region,
-				CIDR:     generateCIDR(),
-			},
-		},
-		Servers:        servers,
-		SupportPackage: defaultSupportPackage,
+		CIDR:      generateCIDR(),
+		Name:      clusterID,
+		ProjectID: env.ProjectID,
+		Provider:  provider,
+		Region:    region,
+		SingleAZ:  singleAZ,
+		Specs:     specs,
+		Package:   defaultSupportPackage,
+	}
+
+	// Custom image
+	if env.Image != "" {
+		if env.OverrideToken == "" || env.ServerVersion == "" {
+			return "", fmt.Errorf("custom image requires override token and server version")
+		}
+		body.Override = &Override{
+			Image:  env.Image,
+			Token:  env.OverrideToken,
+			Server: env.ServerVersion,
+		}
 	}
 
 	reqCtx, cancel := context.WithDeadline(ctx, time.Now().Add(maxRequestTimeout))
 	defer cancel()
 
-	res, err := cs.client.Do(reqCtx, "POST", createClusterPath, body, env)
+	res, err := cs.client.DoInternal(reqCtx, "POST", fmt.Sprintf(createClusterPath, env.TenantID), body, env)
 	if err != nil {
 		return "", err
 	}
@@ -545,8 +558,17 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		return "", fmt.Errorf("create cluster failed: %d: %s", res.StatusCode, string(bb))
 	}
 
-	location := res.Header.Get("Location")
-	cloudClusterID := strings.TrimPrefix(location, createClusterPath+"/")
+	type ID struct {
+		ID string `json:"id"`
+	}
+
+	b, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	id := &ID{}
+	err = json.Unmarshal(b, id)
+	cloudClusterID := id.ID
 
 	tCtx, cancel := context.WithDeadline(ctx, time.Now().Add(25*time.Minute))
 	defer cancel()

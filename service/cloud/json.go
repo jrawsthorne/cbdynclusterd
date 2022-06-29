@@ -35,81 +35,61 @@ type nodeJson struct {
 	AWS      awsServerJSON `json:"aws"`
 }
 
-type V3StorageType string
+type DiskType string
 
 const (
-	V3StorageTypeGP3    V3StorageType = "GP3"
-	V3StorageTypeIO2    V3StorageType = "IO2"
-	V3StorageTypePD_SSD V3StorageType = "PD-SSD"
+	DiskTypeGP3   DiskType = "gp3"
+	DiskTypeIO2   DiskType = "io2"
+	DiskTypePDSSD DiskType = "pd-ssd"
 )
 
-type V3ServersStorage struct {
-	Type V3StorageType `json:"type"`
-	IOPS uint32        `json:"IOPS,omitempty"`
-	Size uint32        `json:"size"`
-}
-
-var defaultComputeAWS = "m5.xlarge"
 var defaultRegionAWS = "us-east-2"
-var defaultProvider = V3ProviderAWS
-var defaultSingleAZ = true
-var defaultComputeGCP = "n2-standard-4"
-var defaultRegionGCP = "us-east1"
-var defaultStorageGCP = V3ServersStorage{
-	Type: V3StorageTypePD_SSD,
-	Size: 50,
+var defaultComputeAWS = Instance{
+	Type: "m5.xlarge",
 }
-var defaultStorageAWS = V3ServersStorage{
-	Type: V3StorageTypeGP3,
-	IOPS: 3000,
-	Size: 50,
+var defaultProvider = ProviderHostedAWS
+var defaultSingleAZ = true
+var defaultComputeGCP = Instance{
+	Type: "n2-standard-4",
+}
+var defaultRegionGCP = "us-east1"
+var defaultDiskeGCP = Disk{
+	Type:     DiskTypePDSSD,
+	SizeInGb: 50,
+}
+var defaultAWSIOPS = 3000
+var defaultDiskAWS = Disk{
+	Type:     DiskTypeGP3,
+	IOPS:     &defaultAWSIOPS,
+	SizeInGb: 50,
 }
 
-type V3CouchbaseService string
+type SupportPackage string
 
 const (
-	V3CouchbaseServiceData      V3CouchbaseService = "data"
-	V3CouchbaseServiceIndex     V3CouchbaseService = "index"
-	V3CouchbaseServiceQuery     V3CouchbaseService = "query"
-	V3CouchbaseServiceSearch    V3CouchbaseService = "search"
-	V3CouchbaseServiceEventing  V3CouchbaseService = "eventing"
-	V3CouchbaseServiceAnalytics V3CouchbaseService = "analytics"
+	SupportPackageDeveloperPro SupportPackage = "developerPro"
 )
 
-type V3Server struct {
-	Size     uint32               `json:"size"`
-	Compute  string               `json:"compute"`
-	Services []V3CouchbaseService `json:"services"`
-	Storage  V3ServersStorage     `json:"storage"`
-}
-
-type supportPackageJson struct {
-	Type     string `json:"type"`
-	Timezone string `json:"timezone"`
-}
-
-var defaultSupportPackage = supportPackageJson{
-	Type:     "DeveloperPro",
-	Timezone: "PT",
-}
+var defaultSupportPackage = SupportPackageDeveloperPro
+var defaultSupportTimezone = ""
 
 var defaultAWS = awsServerJSON{
 	InstanceSize: "m5.xlarge",
 	EbsSizeGib:   50,
 }
 
-type V3Provider string
+type Provider string
 
 const (
-	V3ProviderAWS   V3Provider = "aws"
-	V3ProviderAzure V3Provider = "azure"
-	V3ProviderGCP   V3Provider = "gcp"
+	ProviderHostedAWS Provider = "hostedAWS"
+	ProviderAzure     Provider = "azure"
+	ProviderHostedGCP Provider = "hostedGCP"
 )
 
 type V3PlaceHosted struct {
-	Provider V3Provider `json:"provider"`
-	Region   string     `json:"region"`
-	CIDR     string     `json:"CIDR"`
+	Provider Provider `json:"provider"`
+	Region   string   `json:"region"`
+	CIDR     string   `json:"CIDR"`
 }
 
 type V3Place struct {
@@ -124,13 +104,49 @@ const (
 	V3EnvironmentVPC    V3Environment = "vpc"
 )
 
+type Override struct {
+	Token  string `json:"token"`
+	Image  string `json:"image"`
+	Server string `json:"server"`
+}
+
+type Services []Service
+
+type Service struct {
+	Type string `json:"type"`
+}
+
+type Instance struct {
+	Type       string `json:"type"`
+	CPU        int    `json:"cpu"`
+	MemoryInGb int    `json:"memoryInGb"`
+}
+
+type Disk struct {
+	Type     DiskType `json:"type"`
+	SizeInGb int      `json:"sizeInGb"`
+	IOPS     *int     `json:"iops,omitempty"`
+}
+
+type Spec struct {
+	Count    uint32   `json:"count"`
+	Services Services `json:"services"`
+	Compute  Instance `json:"compute"`
+	Disk     Disk     `json:"disk"`
+}
+
 type setupClusterJson struct {
-	Environment    V3Environment      `json:"environment"`
-	Name           string             `json:"clusterName"`
-	ProjectID      string             `json:"projectId"`
-	Place          V3Place            `json:"place"`
-	Servers        []V3Server         `json:"servers"`
-	SupportPackage supportPackageJson `json:"supportPackage"`
+	CIDR        string         `json:"cidr"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Override    *Override      `json:"overRide,omitempty"`
+	ProjectID   string         `json:"projectId"`
+	Provider    Provider       `json:"provider"`
+	Region      string         `json:"region"`
+	SingleAZ    bool           `json:"singleAZ"`
+	Server      *string        `json:"server"`
+	Specs       []Spec         `json:"specs"`
+	Package     SupportPackage `json:"package"`
 }
 
 type V3BucketRole string
