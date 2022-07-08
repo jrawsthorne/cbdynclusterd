@@ -3,6 +3,7 @@ module github.com/couchbaselabs/cbdynclusterd
 go 1.13
 
 require (
+	github.com/BurntSushi/toml v1.1.0
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.15.0
 	github.com/aws/aws-sdk-go-v2/config v1.9.0
@@ -23,12 +24,10 @@ require (
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
-	github.com/pelletier/go-toml v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.11.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
-	github.com/spf13/viper v1.6.2
 	golang.org/x/crypto v0.0.0-20200403201458-baeed622b8d8
 	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b // indirect
 	gopkg.in/yaml.v2 v2.2.8

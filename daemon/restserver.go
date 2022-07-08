@@ -231,7 +231,7 @@ func (d *daemon) HttpGetCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *daemon) HttpGetDockerHost(w http.ResponseWriter, r *http.Request) {
-	hostURI, err := url.Parse(dockerHost)
+	hostURI, err := url.Parse(config.Docker.Host)
 	if err != nil {
 		writeJSONError(w, err)
 		return
@@ -945,6 +945,8 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 		Region:      reqData.Region,
 		Provider:    reqData.Provider,
 		SingleAZ:    reqData.SingleAZ,
+		EnvName:     reqData.EnvName,
+		Image:       reqData.Image,
 	}
 
 	cloudClusterID, err := d.cloudService.SetupCluster(reqCtx, clusterID, clusterOpts, helper.RestTimeout)
@@ -963,6 +965,7 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 		CloudClusterID:   cloudClusterID,
 		UseSecure:        true,
 		CloudEnvironment: reqData.Environment,
+		CloudEnvName:     reqData.EnvName,
 	}
 	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
 		writeJSONError(w, err)

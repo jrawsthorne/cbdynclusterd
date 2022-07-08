@@ -11,7 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -45,22 +45,26 @@ type EC2Service struct {
 	mu             sync.Mutex
 }
 
-type EC2ServiceOptions struct {
-	AliasRepoPath    string
-	SecurityGroup    string
-	KeyName          string
-	KeyPath          string
-	DownloadPassword string
-	MetaStore        *store.ReadOnlyMetaDataStore
-	DomainName       string
-	HostedZoneId     string
+type EC2Config struct {
+	// Security group to use when creating ec2 instances
+	SecurityGroup string `toml:"security-group"`
+	// SSH key name to use when creating ec2 instances
+	KeyName string `toml:"key-name"`
+	// Password used to download builds from outside the vpn when building AMIs
+	DownloadPassword string `toml:"download-password"`
+	// Path to the SSH private key to connect to ec2 instances
+	KeyPath string `toml:"key-path"`
+	// Domain name in route53 to use to create SRV records
+	DomainName string `toml:"domain-name"`
+	// Hosted zone in route53 to use to create SRV records
+	HostedZoneId string `toml:"hosted-zone-id"`
 }
 
-func NewEC2Service(opts *EC2ServiceOptions) *EC2Service {
+func NewEC2Service(config EC2Config, aliasRepoPath string, metaStore *store.ReadOnlyMetaDataStore) *EC2Service {
 	enabled := true
 	client := &ec2.Client{}
 	route53Client := &route53.Client{}
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRetryer(func() aws.Retryer {
+	cfg, err := awsConfig.LoadDefaultConfig(context.TODO(), awsConfig.WithRetryer(func() aws.Retryer {
 		return retry.AddWithMaxAttempts(retry.NewStandard(), 0) // keep retrying requests if the error is retryable
 	}))
 	if err != nil {
@@ -69,24 +73,24 @@ func NewEC2Service(opts *EC2ServiceOptions) *EC2Service {
 		client = ec2.NewFromConfig(cfg)
 		route53Client = route53.NewFromConfig(cfg)
 	}
-	enabled = enabled && opts.SecurityGroup != "" && opts.KeyName != "" && opts.DownloadPassword != ""
-	route53Enabled := opts.DomainName != "" && opts.HostedZoneId != ""
+	enabled = enabled && config.SecurityGroup != "" && config.KeyName != "" && config.DownloadPassword != ""
+	route53Enabled := config.DomainName != "" && config.HostedZoneId != ""
 	log.Printf("EC2 enabled: %t", enabled)
 	log.Printf("Route53 enabled: %t", route53Enabled)
 
 	return &EC2Service{
 		enabled:          enabled,
 		route53Enabled:   route53Enabled,
-		metaStore:        opts.MetaStore,
+		metaStore:        metaStore,
 		client:           client,
-		aliasRepoPath:    opts.AliasRepoPath,
-		keyName:          opts.KeyName,
-		keyPath:          opts.KeyPath,
-		securityGroup:    opts.SecurityGroup,
-		downloadPassword: opts.DownloadPassword,
+		aliasRepoPath:    aliasRepoPath,
+		keyName:          config.KeyName,
+		keyPath:          config.KeyPath,
+		securityGroup:    config.SecurityGroup,
+		downloadPassword: config.DownloadPassword,
 		route53Client:    route53Client,
-		hostedZoneId:     opts.HostedZoneId,
-		domainName:       opts.DomainName,
+		hostedZoneId:     config.HostedZoneId,
+		domainName:       config.DomainName,
 
 		buildingImages: make(map[string]*[]chan error),
 	}

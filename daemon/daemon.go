@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
 	"github.com/couchbaselabs/cbdynclusterd/dyncontext"
 	"github.com/couchbaselabs/cbdynclusterd/helper"
@@ -21,46 +22,35 @@ import (
 
 	goflag "flag"
 	"fmt"
-	"io/ioutil"
 	"path"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/mitchellh/go-homedir"
-	"github.com/pelletier/go-toml"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 )
 
 var (
 	defaultCfgFileName = ".cbdynclusterd.toml"
 
-	dockerRegistry            = "dockerhub.build.couchbase.com"
-	dockerHost                = "/var/run/docker.sock"
-	dnsSvcHost                = ""
-	aliasRepoPath             = helper.AliasRepoPath
-	cloudAccessKey            = ""
-	cloudPrivateKey           = ""
-	cloudURL                  = ""
-	cloudProjectID            = ""
-	cloudTenantID             = ""
-	cloudUsername             = ""
-	cloudPassword             = ""
-	ec2SecurityGroup          = ""
-	ec2KeyName                = ""
-	ec2DownloadPassword       = ""
-	ec2KeyPath                = ""
-	ec2DomainName             = ""
-	ec2HostedZoneId           = ""
-	dockerMaxContainers int32 = -1
+	defaultDockerRegistry            = "dockerhub.build.couchbase.com"
+	defaultDockerHost                = "/var/run/docker.sock"
+	defaultAliasRepoPath             = helper.AliasRepoPath
+	defaultDockerMaxContainers int32 = -1
 
 	cfgFileFlag string
-	dockerRegistryFlag, dockerHostFlag, dnsSvcHostFlag, aliasRepoPathFlag, cloudAccessKeyFlag, cloudPrivateKeyFlag,
-	cloudProjectIDFlag, ec2KeyNameFlag, ec2SecurityGroupFlag, ec2DownloadPasswordFlag, ec2KeyPathFlag, ec2DomainNameFlag, ec2HostedZoneIdFlag,
-	cloudTenantIDFlag, cloudUsernameFlag, cloudPasswordFlag, cloudURLFlag string
-	dockerPortFlag, dockerMaxContainersFlag int32
+
+	config Config
 )
+
+type Config struct {
+	AliasRepo         string                         `toml:"alias-repo"`
+	Docker            docker.DockerConfig            `toml:"docker"`
+	EC2               ec2.EC2Config                  `toml:"ec2"`
+	Capella           map[string]cloud.CapellaConfig `toml:"capella"`
+	DefaultCapellaEnv string                         `toml:"default-capella-env"`
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "cbdynclusterd",
@@ -85,34 +75,11 @@ func init() {
 	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 	goflag.CommandLine.Parse([]string{})
 	rootCmd.PersistentFlags().StringVar(&cfgFileFlag, "config", "", "config file (default is $HOME/"+defaultCfgFileName+")")
-	rootCmd.PersistentFlags().StringVar(&dockerRegistryFlag, "docker-registry", dockerRegistry, "docker registry to pull/push images")
-	rootCmd.PersistentFlags().StringVar(&dockerHostFlag, "docker-host", dockerHost, "docker host where containers are running (i.e. tcp://127.0.0.1:2376)")
-	rootCmd.PersistentFlags().StringVar(&dnsSvcHostFlag, "dns-host", dnsSvcHost, "Restful DNS server IP")
-	rootCmd.PersistentFlags().StringVar(&aliasRepoPathFlag, "alias-repo", aliasRepoPath, "Path to the alias repo")
-	rootCmd.PersistentFlags().StringVar(&cloudURLFlag, "cloud-url", "", "URL for cloud apis")
-	rootCmd.PersistentFlags().StringVar(&cloudAccessKeyFlag, "cloud-access-key", "", "Access key to use for cloud public api")
-	rootCmd.PersistentFlags().StringVar(&cloudPrivateKeyFlag, "cloud-private-key", "", "Private key to use for cloud public api")
-	rootCmd.PersistentFlags().StringVar(&cloudProjectIDFlag, "cloud-project-id", "", "Project ID to use for cloud")
-	rootCmd.PersistentFlags().StringVar(&cloudTenantIDFlag, "cloud-tenant-id", "", "Tenant ID to use for cloud internal api")
-	rootCmd.PersistentFlags().StringVar(&cloudUsernameFlag, "cloud-username", "", "Username to use for cloud internal api")
-	rootCmd.PersistentFlags().StringVar(&cloudPasswordFlag, "cloud-password", "", "Password to use for cloud internal api")
-	rootCmd.PersistentFlags().StringVar(&ec2KeyNameFlag, "ec2-key-name", "", "SSH key name to use when creating ec2 instances")
-	rootCmd.PersistentFlags().StringVar(&ec2SecurityGroupFlag, "ec2-security-group", "", "Security group to use when creating ec2 instances")
-	rootCmd.PersistentFlags().StringVar(&ec2DownloadPasswordFlag, "ec2-download-password", "", "Password used to download builds from outside the vpn")
-	rootCmd.PersistentFlags().StringVar(&ec2KeyPathFlag, "ec2-key-path", "", "Path to the SSH private key to connect to ec2 instances")
-	rootCmd.PersistentFlags().StringVar(&ec2DomainNameFlag, "ec2-domain-name", "", "Domain name in route53 to use to craeate srv records")
-	rootCmd.PersistentFlags().StringVar(&ec2HostedZoneIdFlag, "ec2-hosted-zone-id", "", "Hosted zone in route53 to use to craeate srv records")
-	rootCmd.PersistentFlags().Int32Var(&dockerMaxContainersFlag, "docker-max-containers", -1, "Max number of contains to allocate")
-
-	rootCmd.PersistentFlags().Int32Var(&dockerPortFlag, "docker-port", 0, "")
-	rootCmd.PersistentFlags().MarkDeprecated("docker-port", "Deprecated flag to specify the port of the docker host")
 }
 
 func initConfig() {
-	if cfgFileFlag != "" {
-		// if user specified the config file, use it
-		viper.SetConfigFile(cfgFileFlag)
-	} else {
+	configFile := cfgFileFlag
+	if configFile == "" {
 		// use default config file
 		home, err := homedir.Dir()
 		if err != nil {
@@ -120,97 +87,30 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		configFile := path.Join(home, defaultCfgFileName)
-		viper.SetConfigFile(configFile)
-
-		// Read configuration file. If not exists, create and set with default values
-		if _, err := os.Stat(configFile); os.IsNotExist(err) {
-			if err = createConfigFile(configFile); err != nil {
-				fmt.Printf("Error:%s\n", err)
-				return
-			}
-		}
+		configFile = path.Join(home, defaultCfgFileName)
 	}
 
-	viper.AutomaticEnv()
-	viper.ReadInConfig()
-
-	getStringArg := func(arg string) string {
-		if rootCmd.PersistentFlags().Changed(arg) {
-			val, _ := rootCmd.PersistentFlags().GetString(arg)
-			return val
-		}
-		return viper.GetString(arg)
-	}
-
-	getInt32Arg := func(arg string) int32 {
-		if rootCmd.PersistentFlags().Changed(arg) {
-			val, _ := rootCmd.PersistentFlags().GetInt32(arg)
-			return val
-		}
-		return viper.GetInt32(arg)
-	}
-
-	dockerRegistryFlag = getStringArg("docker-registry")
-	dockerHostFlag = getStringArg("docker-host")
-	dockerPortFlag = getInt32Arg("docker-port")
-	dnsSvcHostFlag = getStringArg("dns-host")
-	aliasRepoPathFlag = getStringArg("alias-repo")
-	cloudURLFlag = getStringArg("cloud-url")
-	cloudAccessKeyFlag = getStringArg("cloud-access-key")
-	cloudPrivateKeyFlag = getStringArg("cloud-private-key")
-	cloudProjectIDFlag = getStringArg("cloud-project-id")
-	cloudTenantIDFlag = getStringArg("cloud-tenant-id")
-	cloudUsernameFlag = getStringArg("cloud-username")
-	cloudPasswordFlag = getStringArg("cloud-password")
-	ec2SecurityGroupFlag = getStringArg("ec2-security-group")
-	ec2KeyNameFlag = getStringArg("ec2-key-name")
-	ec2DownloadPasswordFlag = getStringArg("ec2-download-password")
-	ec2KeyPathFlag = getStringArg("ec2-key-path")
-	ec2DomainNameFlag = getStringArg("ec2-domain-name")
-	ec2HostedZoneIdFlag = getStringArg("ec2-hosted-zone-id")
-	dockerMaxContainersFlag = getInt32Arg("docker-max-containers")
-
-	dockerRegistry = dockerRegistryFlag
-	dockerHost = dockerHostFlag
-	dnsSvcHost = dnsSvcHostFlag
-	aliasRepoPath = aliasRepoPathFlag
-	cloudURL = cloudURLFlag
-	cloudAccessKey = cloudAccessKeyFlag
-	cloudPrivateKey = cloudPrivateKeyFlag
-	cloudProjectID = cloudProjectIDFlag
-	cloudTenantID = cloudTenantIDFlag
-	cloudUsername = cloudUsernameFlag
-	cloudPassword = cloudPasswordFlag
-	ec2SecurityGroup = ec2SecurityGroupFlag
-	ec2KeyName = ec2KeyNameFlag
-	ec2DownloadPassword = ec2DownloadPasswordFlag
-	ec2KeyPath = ec2KeyPathFlag
-	ec2DomainName = ec2DomainNameFlag
-	ec2HostedZoneId = ec2HostedZoneIdFlag
-	dockerMaxContainers = dockerMaxContainersFlag
-
-	if dockerPortFlag > 0 {
-		dockerHost = fmt.Sprintf("tcp://%s:%d", dockerHostFlag, dockerPortFlag)
-	}
-}
-
-func createConfigFile(configFile string) error {
-	tmap, err := toml.TreeFromMap(nil)
+	_, err := toml.DecodeFile(configFile, &config)
 	if err != nil {
-		return err
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	tmap.Set("docker-registry", dockerRegistryFlag)
-	tmap.Set("docker-host", dockerHostFlag)
-	tmap.Set("dns-host", dnsSvcHostFlag)
-	tmap.Set("alias-repo", aliasRepoPathFlag)
-
-	if dockerPortFlag > 0 {
-		tmap.Set("docker-port", dockerPortFlag)
+	if config.Docker.Host == "" {
+		config.Docker.Host = defaultDockerHost
 	}
 
-	return ioutil.WriteFile(configFile, []byte(tmap.String()), 0644)
+	if config.Docker.Registry == "" {
+		config.Docker.Registry = defaultDockerRegistry
+	}
+
+	if config.Docker.MaxContainers == 0 {
+		config.Docker.MaxContainers = defaultDockerMaxContainers
+	}
+
+	if config.AliasRepo == "" {
+		config.AliasRepo = defaultAliasRepoPath
+	}
 }
 
 type daemon struct {
@@ -235,7 +135,7 @@ func (d *daemon) openMeta() error {
 }
 
 func (d *daemon) connectDocker() (*client.Client, error) {
-	return client.NewClient(dockerHost, "1.38", nil, nil)
+	return client.NewClient(config.Docker.Host, "1.38", nil, nil)
 }
 
 func (d *daemon) hasMacvlan0(cli *client.Client) bool {
@@ -369,18 +269,9 @@ func newDaemon() *daemon {
 	}
 
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
-	d.dockerService = docker.NewDockerService(cli, dockerRegistry, dnsSvcHost, aliasRepoPath, dockerMaxContainers, readOnlyStore)
-	d.cloudService = cloud.NewCloudService(cloudAccessKey, cloudPrivateKey, cloudProjectID, cloudTenantID, cloudUsername, cloudPassword, cloudURL, readOnlyStore)
-	d.ec2Service = ec2.NewEC2Service(&ec2.EC2ServiceOptions{
-		AliasRepoPath:    aliasRepoPath,
-		SecurityGroup:    ec2SecurityGroup,
-		KeyName:          ec2KeyName,
-		KeyPath:          ec2KeyPath,
-		DownloadPassword: ec2DownloadPassword,
-		MetaStore:        readOnlyStore,
-		DomainName:       ec2DomainName,
-		HostedZoneId:     ec2HostedZoneId,
-	})
+	d.dockerService = docker.NewDockerService(cli, config.AliasRepo, config.Docker, readOnlyStore)
+	d.cloudService = cloud.NewCloudService(config.DefaultCapellaEnv, config.Capella, readOnlyStore)
+	d.ec2Service = ec2.NewEC2Service(config.EC2, config.AliasRepo, readOnlyStore)
 
 	// Create a system context to use for system actions (like cleanups)
 	d.systemCtx = dyncontext.NewContext(context.Background(), "system", true)

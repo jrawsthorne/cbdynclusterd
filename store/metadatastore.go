@@ -28,17 +28,14 @@ var (
 )
 
 type CloudEnvironment struct {
-	TenantID  string `json:"tenant_id"`
-	ProjectID string `json:"project_id"`
-	URL       string `json:"url"`
-	AccessKey string `json:"access_key"`
-	SecretKey string `json:"secret_key"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	// Used when deploying with custom AMI
+	TenantID      string `json:"tenant_id"`
+	ProjectID     string `json:"project_id"`
+	URL           string `json:"url"`
+	AccessKey     string `json:"access_key"`
+	SecretKey     string `json:"secret_key"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`
 	OverrideToken string `json:"override_token"`
-	Image         string `json:"image"`
-	ServerVersion string `json:"server_version"`
 }
 
 func (env CloudEnvironment) BaseURLPublic() string {
@@ -57,6 +54,7 @@ type ClusterMetaJSON struct {
 	UseSecure        bool              `json:"useSecure,omitempty"`
 	OS               string            `json:"os,omitempty"`
 	CloudEnvironment *CloudEnvironment `json:"cloudEnvironment,omitempty"`
+	CloudEnvName     string            `json:"cloudEnvName,omitempty"`
 }
 
 type ClusterMeta struct {
@@ -67,6 +65,7 @@ type ClusterMeta struct {
 	UseSecure        bool
 	OS               string
 	CloudEnvironment *CloudEnvironment
+	CloudEnvName     string
 }
 
 type MetaDataStore struct {
@@ -96,6 +95,7 @@ func (store *MetaDataStore) serializeMeta(meta ClusterMeta) ([]byte, error) {
 		UseSecure:        meta.UseSecure,
 		OS:               meta.OS,
 		CloudEnvironment: meta.CloudEnvironment,
+		CloudEnvName:     meta.CloudEnvName,
 	}
 
 	metaBytes, err := json.Marshal(metaJSON)
@@ -126,6 +126,7 @@ func (store *MetaDataStore) deserializeMeta(bytes []byte) (ClusterMeta, error) {
 		UseSecure:        metaJSON.UseSecure,
 		OS:               metaJSON.OS,
 		CloudEnvironment: metaJSON.CloudEnvironment,
+		CloudEnvName:     metaJSON.CloudEnvName,
 	}, nil
 }
 
