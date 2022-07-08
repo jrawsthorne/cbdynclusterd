@@ -1,0 +1,24 @@
+alias-repo = "/opt/cbdynclusterd/alias"
+default-capella-env = "prod"
+
+[capella.prod]
+url = ""
+access-key = ""
+private-key = ""
+project-id = ""
+tenant-id = ""
+username = ""
+password = ""
+
+[docker]
+host = "tcp://172.23.104.43:2376"
+registry = ""
+max-containers = 1
+
+[ec2]
+security-group = ""
+key-name = ""
+download-password = ""
+key-path = ""
+domain-name = ""
+hosted-zone-id = ""

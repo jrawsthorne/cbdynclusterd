@@ -259,6 +259,8 @@ type CreateCloudClusterJSON struct {
 	Region      string                  `json:"region"`
 	Provider    string                  `json:"provider"`
 	SingleAZ    *bool                   `json:"single_az,omitempty"`
+	EnvName     string                  `json:"env_name"`
+	Image       string                  `json:"image"`
 }
 
 type AddIPJSON struct {

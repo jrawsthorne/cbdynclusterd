@@ -16,10 +16,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+type DockerConfig struct {
+	// Docker host where containers are running (i.e. tcp://127.0.0.1:2376)
+	Host string `toml:"host"`
+	// Docker registry to pull/push images
+	Registry string `toml:"registry"`
+	// Max number of contains to allocate concurrently
+	MaxContainers int32 `toml:"max-containers"`
+}
+
 type DockerService struct {
 	docker         *client.Client
 	dockerRegistry string
-	dnsSvcHost     string
 	metaStore      *store.ReadOnlyMetaDataStore
 	aliasRepoPath  string
 
@@ -28,14 +36,13 @@ type DockerService struct {
 	maxContainers int32
 }
 
-func NewDockerService(d *client.Client, dockerRegistry, dnsSvcHost, aliasRepoPath string, maxContainers int32, metaStore *store.ReadOnlyMetaDataStore) *DockerService {
+func NewDockerService(d *client.Client, aliasRepoPath string, config DockerConfig, metaStore *store.ReadOnlyMetaDataStore) *DockerService {
 	return &DockerService{
 		docker:         d,
-		dockerRegistry: dockerRegistry,
-		dnsSvcHost:     dnsSvcHost,
+		dockerRegistry: config.Registry,
 		metaStore:      metaStore,
 		aliasRepoPath:  aliasRepoPath,
-		maxContainers:  maxContainers,
+		maxContainers:  config.MaxContainers,
 		reserved:       make(map[string]int),
 	}
 }

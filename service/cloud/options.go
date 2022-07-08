@@ -15,4 +15,6 @@ type ClusterSetupOptions struct {
 	Region      string
 	Provider    string
 	SingleAZ    *bool
+	EnvName     string
+	Image       string
 }

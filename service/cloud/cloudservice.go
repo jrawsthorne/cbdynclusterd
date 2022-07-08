@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,28 +20,71 @@ import (
 	"github.com/couchbaselabs/cbdynclusterd/store"
 )
 
+var (
+	// Looks for x.x.x e.g. 7.1.0
+	serverVersionFromImageRegex = regexp.MustCompile(`\d\.\d\.\d`)
+)
+
+type CapellaConfig struct {
+	// URL for Capllea APIs (e.g. cloud.couchbase.com)
+	URL string `toml:"url"`
+	// Access key to use for Capella public API
+	AccessKey string `toml:"access-key"`
+	// Private key to use for Capella public API
+	PrivateKey string `toml:"private-key"`
+	// Project ID to use for Capella APIs
+	ProjectID string `toml:"project-id"`
+	// Tenant ID to use for Capella APIs
+	TenantID string `toml:"tenant-id"`
+	// Username to use for Capella internal API
+	Username string `toml:"username"`
+	// Password to use for Capella internal API
+	Password string `toml:"password"`
+	// Override token to use to create nonstandard Capella clusters
+	OverrideToken string `toml:"override-token"`
+}
+
 type CloudService struct {
 	defaultEnv *store.CloudEnvironment
+	envs       map[string]*store.CloudEnvironment
 	enabled    bool
 	client     *client
 	metaStore  *store.ReadOnlyMetaDataStore
 }
 
-func NewCloudService(accessKey, privateKey, projectID, tenantID, username, password, baseURL string, metaStore *store.ReadOnlyMetaDataStore) *CloudService {
-	log.Printf("Cloud enabled: %t", projectID != "")
+func envFromConfig(config CapellaConfig) *store.CloudEnvironment {
+	return &store.CloudEnvironment{
+		TenantID:      config.TenantID,
+		ProjectID:     config.ProjectID,
+		URL:           config.URL,
+		AccessKey:     config.AccessKey,
+		SecretKey:     config.PrivateKey,
+		Username:      config.Username,
+		Password:      config.Password,
+		OverrideToken: config.OverrideToken,
+	}
+}
+
+func NewCloudService(defaultEnvKey string, config map[string]CapellaConfig, metaStore *store.ReadOnlyMetaDataStore) *CloudService {
+	envs := make(map[string]*store.CloudEnvironment)
+	for key, config := range config {
+		envs[key] = envFromConfig(config)
+	}
+	var defaultEnv *store.CloudEnvironment
+	if defaultEnvKey != "" {
+		env, ok := config[defaultEnvKey]
+		if ok {
+			defaultEnv = envFromConfig(env)
+		}
+	}
+	enabled := defaultEnv != nil
+	log.Printf("Cloud enabled: %t", enabled)
 	return &CloudService{
-		enabled: projectID != "" && tenantID != "" && username != "" && password != "" && baseURL != "" && accessKey != "" && privateKey != "",
-		defaultEnv: &store.CloudEnvironment{
-			TenantID:  tenantID,
-			ProjectID: projectID,
-			URL:       baseURL,
-			AccessKey: accessKey,
-			SecretKey: privateKey,
-			Username:  username,
-			Password:  password,
-		},
-		client:    NewClient(),
-		metaStore: metaStore,
+		enabled:    enabled,
+		defaultEnv: defaultEnv,
+		envs:       envs,
+		client:     NewClient(),
+		metaStore:  metaStore,
 	}
 }
 
@@ -229,6 +273,11 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 		return nil, ErrCloudNotEnabled
 	}
 
+	_, env, err := cs.getCloudClusterEnv(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+
 	meta, err := cs.metaStore.GetClusterMeta(clusterID)
 	if err != nil {
 		log.Printf("Encountered unregistered cluster: %s", clusterID)
@@ -238,11 +287,6 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 	if meta.CloudClusterID == "" {
 		log.Printf("Encountered cluster with no cloud cluster ID: %s", clusterID)
 		return nil, errors.New("unknown cluster")
-	}
-
-	env := meta.CloudEnvironment
-	if env == nil {
-		env = cs.defaultEnv
 	}
 
 	log.Printf("Running cloud GetCluster for %s: %s", clusterID, meta.CloudClusterID)
@@ -324,16 +368,11 @@ func (cs *CloudService) AddIP(ctx context.Context, clusterID, ip string) error {
 	return cs.addIP(ctx, clusterID, cloudClusterID, ip, env)
 }
 
-func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster, error) {
-	if !cs.enabled {
-		return nil, ErrCloudNotEnabled
-	}
-
-	log.Printf("Running cloud GetAllClusters")
-
+// getAllClusters returns all clusters in the given environment
+func (cs *CloudService) getAllClusters(ctx context.Context, env *store.CloudEnvironment) ([]*cluster.Cluster, error) {
 	// TODO: Implement pagination
 	// TODO: Support listing get all clusters across custom environments
-	res, err := cs.client.Do(ctx, "GET", getAllClustersPath+fmt.Sprintf("?perPage=1000&projectId=%s", cs.defaultEnv.ProjectID), nil, cs.defaultEnv)
+	res, err := cs.client.Do(ctx, "GET", getAllClustersPath+fmt.Sprintf("?perPage=1000&projectId=%s", env.ProjectID), nil, env)
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +411,28 @@ func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster,
 	}
 
 	return clusters, nil
+}
+
+// GetAllClusters returns all clusters in predefined environments
+func (cs *CloudService) GetAllClusters(ctx context.Context) ([]*cluster.Cluster, error) {
+	if !cs.enabled {
+		return nil, ErrCloudNotEnabled
+	}
+
+	log.Printf("Running cloud GetAllClusters")
+
+	var allClusters []*cluster.Cluster
+
+	for _, env := range cs.envs {
+		clusters, err := cs.getAllClusters(ctx, env)
+		if err != nil {
+			return nil, err
+		}
+
+		allClusters = append(allClusters, clusters...)
+	}
+
+	return allClusters, nil
 }
 
 func (cs *CloudService) KillCluster(ctx context.Context, clusterID string) error {
@@ -449,9 +510,18 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 
 	log.Printf("Running SetupCluster for %s with %v", clusterID, opts.Nodes)
 
-	env := opts.Environment
-	if env == nil {
-		env = cs.defaultEnv
+	env := cs.defaultEnv
+
+	if opts.EnvName != "" {
+		customEnv, ok := cs.envs[opts.EnvName]
+		if !ok {
+			return "", fmt.Errorf("environment %s not found", opts.EnvName)
+		}
+		env = customEnv
+	}
+
+	if opts.Environment != nil {
+		env = opts.Environment
 	}
 
 	provider := defaultProvider
@@ -525,14 +595,15 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	}
 
 	// Custom image
-	if env.Image != "" {
-		if env.OverrideToken == "" || env.ServerVersion == "" {
-			return "", fmt.Errorf("custom image requires override token and server version")
+	if opts.Image != "" {
+		serverVersion := serverVersionFromImageRegex.FindString(opts.Image)
+		if serverVersion == "" {
+			return "", fmt.Errorf("image %s does not contain a valid server version", opts.Image)
 		}
 		body.Override = &Override{
-			Image:  env.Image,
+			Image:  opts.Image,
 			Token:  env.OverrideToken,
-			Server: env.ServerVersion,
+			Server: serverVersion,
 		}
 	}
 
@@ -729,9 +800,18 @@ func (cs *CloudService) getCloudClusterEnv(ctx context.Context, clusterID string
 		return "", nil, errors.New("unknown cluster")
 	}
 
-	env := meta.CloudEnvironment
-	if env == nil {
-		env = cs.defaultEnv
+	env := cs.defaultEnv
+
+	if meta.CloudEnvName != "" {
+		customEnv, ok := cs.envs[meta.CloudEnvName]
+		if !ok {
+			return "", nil, fmt.Errorf("unknown cloud environment: %s", meta.CloudEnvName)
+		}
+		env = customEnv
+	}
+
+	if meta.CloudEnvironment != nil {
+		env = meta.CloudEnvironment
 	}
 
 	return meta.CloudClusterID, env, nil
