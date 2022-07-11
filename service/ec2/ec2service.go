@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -50,8 +53,6 @@ type EC2Config struct {
 	SecurityGroup string `toml:"security-group"`
 	// SSH key name to use when creating ec2 instances
 	KeyName string `toml:"key-name"`
-	// Password used to download builds from outside the vpn when building AMIs
-	DownloadPassword string `toml:"download-password"`
 	// Path to the SSH private key to connect to ec2 instances
 	KeyPath string `toml:"key-path"`
 	// Domain name in route53 to use to create SRV records
@@ -73,24 +74,23 @@ func NewEC2Service(config EC2Config, aliasRepoPath string, metaStore *store.Read
 		client = ec2.NewFromConfig(cfg)
 		route53Client = route53.NewFromConfig(cfg)
 	}
-	enabled = enabled && config.SecurityGroup != "" && config.KeyName != "" && config.DownloadPassword != ""
+	enabled = enabled && config.SecurityGroup != "" && config.KeyName != ""
 	route53Enabled := config.DomainName != "" && config.HostedZoneId != ""
 	log.Printf("EC2 enabled: %t", enabled)
 	log.Printf("Route53 enabled: %t", route53Enabled)
 
 	return &EC2Service{
-		enabled:          enabled,
-		route53Enabled:   route53Enabled,
-		metaStore:        metaStore,
-		client:           client,
-		aliasRepoPath:    aliasRepoPath,
-		keyName:          config.KeyName,
-		keyPath:          config.KeyPath,
-		securityGroup:    config.SecurityGroup,
-		downloadPassword: config.DownloadPassword,
-		route53Client:    route53Client,
-		hostedZoneId:     config.HostedZoneId,
-		domainName:       config.DomainName,
+		enabled:        enabled,
+		route53Enabled: route53Enabled,
+		metaStore:      metaStore,
+		client:         client,
+		aliasRepoPath:  aliasRepoPath,
+		keyName:        config.KeyName,
+		keyPath:        config.KeyPath,
+		securityGroup:  config.SecurityGroup,
+		route53Client:  route53Client,
+		hostedZoneId:   config.HostedZoneId,
+		domainName:     config.DomainName,
 
 		buildingImages: make(map[string]*[]chan error),
 	}
@@ -141,6 +141,42 @@ func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateC
 	return nil
 }
 
+func (s *EC2Service) buildAMI(imageName string, nodeVersion *common.NodeVersion) error {
+	log.Printf("Downloading build %s to /tmp", nodeVersion.ToPkgName())
+
+	localFileName := fmt.Sprintf("/tmp/%s", nodeVersion.ToPkgName())
+	remoteFileName := fmt.Sprintf("%s/%s", nodeVersion.ToURL(), nodeVersion.ToPkgName())
+
+	file, err := os.Create(localFileName)
+	if err != nil {
+		return err
+	}
+
+	// Defers are FILO so we need to close the file before we can remove it.
+	defer os.Remove(localFileName)
+	defer file.Close()
+
+	client := http.Client{}
+
+	resp, err := client.Get(remoteFileName)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	_, err = io.Copy(file, resp.Body)
+
+	err = CallPacker(PackerOptions{
+		BuildPkg: nodeVersion.ToPkgName(),
+		AmiName:  imageName,
+		Arch:     nodeVersion.Arch,
+		OS:       nodeVersion.OS,
+	})
+
+	return err
+}
+
 func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.NodeVersion, clusterID string) error {
 
 	imageName := nodeVersion.ToImageName("cbdyncluster")
@@ -187,15 +223,7 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 
 	log.Printf("No image found for %s, building...", imageName)
 
-	err = CallPacker(PackerOptions{
-		DownloadPassword: s.downloadPassword,
-		Version:          nodeVersion.Version,
-		BuildPkg:         nodeVersion.ToPkgName(),
-		BaseUrl:          nodeVersion.ToExternalURL(),
-		AmiName:          imageName,
-		Arch:             nodeVersion.Arch,
-		OS:               nodeVersion.OS,
-	})
+	err = s.buildAMI(imageName, nodeVersion)
 
 	// inform any waiters
 	s.mu.Lock()
