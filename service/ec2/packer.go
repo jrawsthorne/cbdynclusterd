@@ -7,13 +7,10 @@ import (
 )
 
 type PackerOptions struct {
-	DownloadPassword string
-	Version          string
-	BuildPkg         string
-	BaseUrl          string
-	AmiName          string
-	Arch             string
-	OS               string
+	BuildPkg string
+	AmiName  string
+	Arch     string
+	OS       string
 }
 
 func addArg(args *[]string, arg string) {
@@ -59,10 +56,7 @@ func CallPacker(opts PackerOptions) error {
 	args := []string{}
 
 	args = append(args, "build")
-	addArg(&args, "download_password="+opts.DownloadPassword)
-	addArg(&args, "version="+opts.Version)
 	addArg(&args, "build_pkg="+opts.BuildPkg)
-	addArg(&args, "base_url="+opts.BaseUrl)
 	addArg(&args, "ami_name="+opts.AmiName)
 	addArg(&args, "arch="+opts.Arch)
 	addArg(&args, "source_ami_filter="+packageToAMIArg[opts.OS][opts.Arch].SourceAMIFilter)

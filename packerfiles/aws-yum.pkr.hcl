@@ -7,25 +7,7 @@ packer {
   }
 }
 
-variable "download_username" {
-  type    = string
-  default = "couchbase"
-}
-
-variable "download_password" {
-  type      = string
-  sensitive = true
-}
-
 variable "build_pkg" {
-  type = string
-}
-
-variable "base_url" {
-  type = string
-}
-
-variable "version" {
   type = string
 }
 
@@ -84,17 +66,16 @@ build {
   sources = [
     "source.amazon-ebs.yum"
   ]
+  provisioner "file" {
+    destination = "/tmp/"
+    source      = "/tmp/${var.build_pkg}"
+  }
   provisioner "shell" {
     inline = [
-      "curl -u ${var.download_username}:${var.download_password} -o ${var.build_pkg} -s ${local.build_url}",
-      "sudo yum install -y ${var.build_pkg}",
-      "rm ${var.build_pkg}",
+      "sudo yum install -y /tmp/${var.build_pkg}",
+      "rm /tmp/${var.build_pkg}",
       "sudo usermod -a -G couchbase ${var.ssh_username}",
       "sudo chmod 770 /opt/couchbase/var/lib/couchbase"
     ]
   }
-}
-
-locals {
-  build_url = "${var.base_url}/${var.build_pkg}"
 }
