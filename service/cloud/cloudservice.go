@@ -502,6 +502,48 @@ func generateCIDR() string {
 	return fmt.Sprintf("10.%d.%d.0/20", first, second)
 }
 
+func (cs *CloudService) postClusterCreate(ctx context.Context, clusterID, cloudClusterID string, env *store.CloudEnvironment, maxRequestTimeout time.Duration) error {
+	tCtx, cancel := context.WithDeadline(ctx, time.Now().Add(25*time.Minute))
+	defer cancel()
+
+	for {
+		getReqCtx, cancel := context.WithDeadline(tCtx, time.Now().Add(maxRequestTimeout))
+
+		// If the tCtx deadline expires then this return an error.
+		c, err := cs.getCluster(getReqCtx, cloudClusterID, env)
+		cancel()
+		if err != nil {
+			return err
+		}
+
+		if c.Status == clusterHealthy {
+			break
+		}
+
+		if c.Status == clusterDeploymentFailed {
+			return errors.New("create cluster failed: status is deploymentFailed")
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+
+	// Create default user
+	defaultUser := &helper.UserOption{
+		Name:     helper.RestUser,
+		Password: helper.RestPassCapella,
+	}
+	if err := cs.addUser(ctx, clusterID, cloudClusterID, defaultUser, env); err != nil {
+		return err
+	}
+
+	// allow all ips, these are only temporary, non security sensitive clusters so it's fine
+	if err := cs.addIP(ctx, clusterID, cloudClusterID, "0.0.0.0/0", env); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts ClusterSetupOptions,
 	maxRequestTimeout time.Duration) (string, error) {
 	if !cs.enabled {
@@ -641,47 +683,8 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	err = json.Unmarshal(b, id)
 	cloudClusterID := id.ID
 
-	tCtx, cancel := context.WithDeadline(ctx, time.Now().Add(25*time.Minute))
-	defer cancel()
-
-	for {
-		getReqCtx, cancel := context.WithDeadline(tCtx, time.Now().Add(maxRequestTimeout))
-
-		// If the tCtx deadline expires then this return an error.
-		c, err := cs.getCluster(getReqCtx, cloudClusterID, env)
-		cancel()
-		if err != nil {
-			go func() {
-				cs.killCluster(ctx, clusterID, cloudClusterID, env)
-			}()
-			return "", err
-		}
-
-		if c.Status == clusterHealthy {
-			break
-		}
-
-		if c.Status == clusterDeploymentFailed {
-			return "", errors.New("create cluster failed: status is deploymentFailed")
-		}
-
-		time.Sleep(5 * time.Second)
-	}
-
-	// Create default user
-	defaultUser := &helper.UserOption{
-		Name:     helper.RestUser,
-		Password: helper.RestPassCapella,
-	}
-	if err := cs.addUser(ctx, clusterID, cloudClusterID, defaultUser, env); err != nil {
-		go func() {
-			cs.killCluster(ctx, clusterID, cloudClusterID, env)
-		}()
-		return "", err
-	}
-
-	// allow all ips, these are only temporary, non security sensitive clusters so it's fine
-	if err := cs.addIP(ctx, clusterID, cloudClusterID, "0.0.0.0/0", env); err != nil {
+	err = cs.postClusterCreate(ctx, clusterID, cloudClusterID, env, maxRequestTimeout)
+	if err != nil {
 		go func() {
 			cs.killCluster(ctx, clusterID, cloudClusterID, env)
 		}()
