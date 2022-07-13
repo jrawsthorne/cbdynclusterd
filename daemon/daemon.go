@@ -63,18 +63,15 @@ var rootCmd = &cobra.Command{
 
 // Execute starts our daemon service.
 func Execute() {
+	cobra.OnInitialize(initConfig)
+	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
+	goflag.CommandLine.Parse([]string{})
+	rootCmd.PersistentFlags().StringVar(&cfgFileFlag, "config", "", "config file (default is $HOME/"+defaultCfgFileName+")")
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func init() {
-	cobra.OnInitialize(initConfig)
-
-	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
-	goflag.CommandLine.Parse([]string{})
-	rootCmd.PersistentFlags().StringVar(&cfgFileFlag, "config", "", "config file (default is $HOME/"+defaultCfgFileName+")")
 }
 
 func initConfig() {
