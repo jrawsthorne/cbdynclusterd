@@ -22,6 +22,8 @@ type AddBucketOptions struct {
 	BucketType     string
 	EvictionPolicy string
 	StorageBackend string
+	NumVBuckets    int
+	Width          int
 }
 
 type AddSampleOptions struct {

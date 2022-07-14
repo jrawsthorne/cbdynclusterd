@@ -7,4 +7,6 @@ type Bucket struct {
 	ReplicaCount      int
 	EphEvictionPolicy string
 	StorageBackend    string
+	NumVBuckets       int
+	Width             int
 }

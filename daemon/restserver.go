@@ -555,6 +555,8 @@ func (d *daemon) HttpAddBucket(w http.ResponseWriter, r *http.Request) {
 		BucketType:     reqData.BucketType,
 		EvictionPolicy: reqData.EvictionPolicy,
 		StorageBackend: reqData.StorageBackend,
+		Width:          reqData.Width,
+		NumVBuckets:    reqData.NumVBuckets,
 	}, service.ConnectContext{UseSecure: meta.UseSecure})
 	if err != nil {
 		writeJSONError(w, err)

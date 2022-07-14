@@ -216,6 +216,8 @@ type AddBucketJSON struct {
 	BucketType     string `json:"bucket_type"`
 	EvictionPolicy string `json:"eviction_policy"`
 	StorageBackend string `json:"storage_backend"`
+	Width          int    `json:"width"`
+	NumVBuckets    int    `json:"num_vbuckets"`
 }
 
 type AddSampleBucketJSON struct {

@@ -512,6 +512,16 @@ func (n *Node) CreateBucket(conf *cluster.Bucket) error {
 		}
 	}
 
+	if conf.NumVBuckets != 0 {
+		body = fmt.Sprintf("%s&numVBuckets=%d", body, conf.NumVBuckets)
+	}
+
+	if conf.Width != 0 {
+		// set to lowest weight of 1
+		body = fmt.Sprintf("%s&weight=1", body)
+		body = fmt.Sprintf("%s&width=%d", body, conf.Width)
+	}
+
 	restParam := &helper.RestCall{
 		ExpectedCode: 202,
 		Method:       "POST",
