@@ -25,19 +25,26 @@ type NodeOptions struct {
 }
 
 type NodeVersion struct {
-	Version string
-	Flavor  string
-	Build   string
-	Edition Edition
-	OS      string
-	Arch    string
+	Version        string
+	Flavor         string
+	Build          string
+	Edition        Edition
+	OS             string
+	Arch           string
+	ServerlessMode bool
 }
 
 func (nv *NodeVersion) ToTagName() string {
+	var tagName string
 	if nv.Build == "" {
-		return fmt.Sprintf("%s.%s.%s", nv.Version, nv.OS, nv.Arch)
+		tagName = fmt.Sprintf("%s.%s.%s", nv.Version, nv.OS, nv.Arch)
+	} else {
+		tagName = fmt.Sprintf("%s-%s.%s.%s", nv.Version, nv.Build, nv.OS, nv.Arch)
 	}
-	return fmt.Sprintf("%s-%s.%s.%s", nv.Version, nv.Build, nv.OS, nv.Arch)
+	if nv.ServerlessMode {
+		tagName += "-serverless"
+	}
+	return tagName
 }
 
 func (nv *NodeVersion) ToImageName(prefix string) string {
@@ -116,7 +123,7 @@ func flavorFromVersion(version string) (string, error) {
 	return flavor, nil
 }
 
-func ParseServerVersion(version, os, arch string, useCE bool) (*NodeVersion, error) {
+func ParseServerVersion(version, os, arch string, useCE, serverlessMode bool) (*NodeVersion, error) {
 	nodeVersion := NodeVersion{}
 	if os == "" {
 		os = "centos7"
@@ -145,6 +152,7 @@ func ParseServerVersion(version, os, arch string, useCE bool) (*NodeVersion, err
 	} else {
 		nodeVersion.Edition = Enterprise
 	}
+	nodeVersion.ServerlessMode = serverlessMode
 
 	return &nodeVersion, nil
 }
@@ -189,7 +197,8 @@ func CreateNodesToAllocate(nodes []service.CreateNodeOptions, aliasRepoPath stri
 		if err != nil {
 			return nil, err
 		}
-		nodeVersion, err := ParseServerVersion(finalVersion, node.OS, node.Arch, node.UseCommunityEdition)
+
+		nodeVersion, err := ParseServerVersion(finalVersion, node.OS, node.Arch, node.UseCommunityEdition, node.ServerlessMode)
 		if err != nil {
 			return nil, err
 		}

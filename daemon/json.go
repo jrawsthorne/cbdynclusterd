@@ -174,6 +174,7 @@ type CreateClusterNodeJSON struct {
 	UseCommunityEdition bool   `json:"community_edition"`
 	OS                  string `json:"os"`
 	Arch                string `json:"arch"`
+	ServerlessMode      bool   `json:"serverless_mode"`
 }
 
 type CreateClusterSetupJSON struct {
@@ -246,6 +247,7 @@ type BuildImageJSON struct {
 	UseCommunityEdition bool   `json:"community_edition"`
 	OS                  string `json:"os"`
 	Arch                string `json:"arch"`
+	ServerlessMode      bool   `json:"serverless_mode"`
 }
 
 type BuildImageResponseJSON struct {

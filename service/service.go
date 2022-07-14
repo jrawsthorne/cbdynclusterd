@@ -27,6 +27,7 @@ type CreateNodeOptions struct {
 	UseCommunityEdition bool
 	OS                  string
 	Arch                string
+	ServerlessMode      bool
 }
 
 type ConnectContext struct {

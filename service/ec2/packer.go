@@ -7,10 +7,11 @@ import (
 )
 
 type PackerOptions struct {
-	BuildPkg string
-	AmiName  string
-	Arch     string
-	OS       string
+	BuildPkg       string
+	AmiName        string
+	Arch           string
+	OS             string
+	ServerlessMode bool
 }
 
 func addArg(args *[]string, arg string) {
@@ -63,6 +64,7 @@ func CallPacker(opts PackerOptions) error {
 	addArg(&args, "ssh_username="+osToSSHUsername[opts.OS])
 	addArg(&args, "ami_owner="+packageToAMIArg[opts.OS][opts.Arch].Owner)
 	addArg(&args, "device_name="+osToDeviceName[opts.OS])
+	addArg(&args, "serverless_mode="+fmt.Sprintf("%t", opts.ServerlessMode))
 	args = append(args, filePath)
 
 	cmd := exec.Command("packer", args...)

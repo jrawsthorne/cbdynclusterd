@@ -73,6 +73,10 @@ func (ds *DockerService) imageBuild(ctx context.Context, nodeVersion *common.Nod
 	buildArgs["FLAVOR"] = &nodeVersion.Flavor
 	buildArgs["BUILD_PKG"] = &pkg
 	buildArgs["BASE_URL"] = &url
+	if nodeVersion.ServerlessMode {
+		serverlessMode := "true"
+		buildArgs["SERVERLESS_MODE"] = &serverlessMode
+	}
 
 	buildCtx, err := os.Open(tarPath)
 	defer buildCtx.Close()
