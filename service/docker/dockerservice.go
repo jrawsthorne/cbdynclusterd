@@ -345,3 +345,7 @@ func (ds *DockerService) ConnString(ctx context.Context, clusterID string, useSS
 	}
 	return common.ConnString(ctx, ds, clusterID, useSSL)
 }
+
+func (ds *DockerService) RunCBCollect(ctx context.Context, clusterID string) (*service.CBCollectResult, error) {
+	return common.RunCBCollect(ctx, ds, clusterID, service.ConnectContext{})
+}

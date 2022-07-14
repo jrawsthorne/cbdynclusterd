@@ -287,3 +287,7 @@ type RegisterCloudClusterJSON struct {
 	ClusterID      string `json:"cluster_id"`
 	CloudClusterID string `json:"cloud_id"`
 }
+
+type CBCollectResultJSON struct {
+	Collections map[string][]byte `json:"collections"`
+}
