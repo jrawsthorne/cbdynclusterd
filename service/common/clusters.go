@@ -130,6 +130,8 @@ func AddBucket(ctx context.Context, s service.ClusterService, clusterID string, 
 		RamQuotaMB:        strconv.Itoa(opts.RamQuota),
 		EphEvictionPolicy: opts.EvictionPolicy,
 		StorageBackend:    opts.StorageBackend,
+		NumVBuckets:       opts.NumVBuckets,
+		Width:             opts.Width,
 	})
 }
 
