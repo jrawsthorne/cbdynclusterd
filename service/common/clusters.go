@@ -237,3 +237,44 @@ func AddUser(ctx context.Context, s service.ClusterService, clusterID string, op
 
 	return node.CreateUser(opts.User)
 }
+
+func RunCBCollect(ctx context.Context, s service.ClusterService, clusterID string, connCtx service.ConnectContext) (*service.CBCollectResult, error) {
+	c, err := s.GetCluster(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+
+	type Resp struct {
+		Err   error
+		Bytes []byte
+	}
+
+	recv := make(chan Resp)
+
+	var nodes []*Node
+	for _, node := range c.Nodes {
+		node := NewNode(node.IPv4Address, connCtx)
+		nodes = append(nodes, node)
+		go func(recv chan Resp, node *Node) {
+			bytes, err := node.RunCBCollect()
+			recv <- Resp{Err: err, Bytes: bytes}
+		}(recv, node)
+	}
+
+	collections := make(map[string][]byte, len(nodes))
+
+	for _, n := range nodes {
+		resp := <-recv
+		if resp.Err != nil {
+			err = resp.Err
+			continue
+		}
+		collections[n.HostName] = resp.Bytes
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &service.CBCollectResult{Collections: collections}, nil
+}

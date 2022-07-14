@@ -703,3 +703,17 @@ func (s *EC2Service) terminateInstances(ctx context.Context, instanceIds []strin
 
 	return err
 }
+
+func (s *EC2Service) RunCBCollect(ctx context.Context, clusterID string) (*service.CBCollectResult, error) {
+	meta, err := s.metaStore.GetClusterMeta(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	if meta.OS == "" {
+		return nil, errors.New("cluster does not have an OS specified")
+	}
+	var connCtx service.ConnectContext
+	connCtx.SshKeyPath = s.keyPath
+	connCtx.SshUsername = osToSSHUsername[meta.OS]
+	return common.RunCBCollect(ctx, s, clusterID, connCtx)
+}

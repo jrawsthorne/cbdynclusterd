@@ -14,6 +14,10 @@ type CertAuthResult struct {
 	ClientCert []byte
 }
 
+type CBCollectResult struct {
+	Collections map[string][]byte
+}
+
 type AllocateClusterOptions struct {
 	ClusterID string
 	Deadline  time.Time
@@ -57,6 +61,7 @@ type ClusterService interface {
 type UnmanagedClusterService interface {
 	ClusterService
 	AllocateCluster(ctx context.Context, opts AllocateClusterOptions) error
+	RunCBCollect(ctx context.Context, clusterID string) (*CBCollectResult, error)
 }
 
 var MaxCapacityError = errors.New("max capacity reached")

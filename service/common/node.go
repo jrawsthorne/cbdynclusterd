@@ -1339,3 +1339,46 @@ func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKe
 
 	return nil
 }
+
+// RunCBCollect executs the cbcollect-info command and returns the raw bytes of the output
+func (n *Node) RunCBCollect() ([]byte, error) {
+	client, err := newClient(n.SshLogin)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+
+	path := "/tmp/cbcollect.zip"
+
+	err = session.Run(fmt.Sprintf("/opt/couchbase/bin/cbcollect_info %s", path))
+	if err != nil {
+		return nil, err
+	}
+
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return nil, err
+	}
+
+	scpClient := scp.NewSCP(client)
+
+	var buf bytes.Buffer
+
+	_, err = scpClient.Receive(path, &buf)
+	if err != nil {
+		return nil, err
+	}
+
+	err = sftpClient.Remove(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}

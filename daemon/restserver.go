@@ -1015,6 +1015,48 @@ func (d *daemon) HttpRegisterCloudCluster(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(200)
 }
 
+func (d *daemon) HttpCBCollect(w http.ResponseWriter, r *http.Request) {
+	reqCtx, err := getHttpContext(r)
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	clusterID := mux.Vars(r)["cluster_id"]
+
+	meta, err := d.metaStore.GetClusterMeta(clusterID)
+	if err != nil {
+		log.Printf("Encountered unregistered cluster: %s", clusterID)
+		writeJSONError(w, err)
+		return
+	}
+
+	var s service.UnmanagedClusterService
+	if meta.Platform == store.ClusterPlatformCloud {
+		writeJSONError(w, errors.New("cannot run cbcollect on a cloud cluster"))
+		return
+	} else if meta.Platform == store.ClusterPlatformDocker {
+		s = d.dockerService
+	} else if meta.Platform == store.ClusterPlatformEC2 {
+		s = d.ec2Service
+	} else {
+		log.Printf("Cluster found with no platform, assuming docker: %s", clusterID)
+		s = d.dockerService
+	}
+
+	result, err := s.RunCBCollect(reqCtx, clusterID)
+
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	resultJson := CBCollectResultJSON{
+		Collections: result.Collections,
+	}
+	writeJsonResponse(w, resultJson)
+}
+
 func (d *daemon) createRESTRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/", d.HttpRoot)
@@ -1037,5 +1079,6 @@ func (d *daemon) createRESTRouter() *mux.Router {
 	r.HandleFunc("/cluster/{cluster_id}/connstr", d.HttpConnString).Methods("GET")
 	r.HandleFunc("/images", d.HttpBuildImage).Methods("POST")
 	r.HandleFunc("/register-cloud-cluster", d.HttpRegisterCloudCluster).Methods("POST")
+	r.HandleFunc("/cluster/{cluster_id}/cbcollect", d.HttpCBCollect).Methods("GET")
 	return r
 }
