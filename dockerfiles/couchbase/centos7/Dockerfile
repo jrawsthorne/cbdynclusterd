@@ -22,6 +22,7 @@ ARG BUILD_NO=2412
 ARG FLAVOR=spock
 ARG BUILD_PKG=couchbase-server-enterprise-$VERSION-$BUILD_NO-centos7.x86_64.rpm
 ARG BASE_URL=http://latestbuilds.service.couchbase.com/builds/latestbuilds/couchbase-server/$FLAVOR/$BUILD_NO
+ARG SERVERLESS_MODE=false
 
 ARG BUILD_URL=$BASE_URL/$BUILD_PKG
 
@@ -30,6 +31,8 @@ RUN wget -q -N $BUILD_URL
 
 # Install couchbase
 RUN rpm --install $BUILD_PKG 
+
+RUN if [ ${SERVERLESS_MODE} == 'true' ]; then mkdir -p /etc/couchbase.d && /bin/sh -c 'echo serverless > /etc/couchbase.d/config_profile' && chmod 755 /etc/couchbase.d/config_profile; fi
 
 #clean the cache
 RUN yum clean all
@@ -47,9 +50,9 @@ LABEL Vendor=Couchbase
 LABEL Version=${VERSION}
 LABEL Architecture="x86_64"
 LABEL RUN="docker run -d --rm --privileged -p 8091:8091 --restart always --name NAME IMAGE \
-            -v /opt/couchbase/var:/opt/couchbase/var \
-            -v /opt/couchbase/var/lib/moxi:/opt/couchbase/var/lib/moxi \
-            -v /opt/couchbase/var/lib/stats:/opt/couchbase/var/lib/stats "
+    -v /opt/couchbase/var:/opt/couchbase/var \
+    -v /opt/couchbase/var/lib/moxi:/opt/couchbase/var/lib/moxi \
+    -v /opt/couchbase/var/lib/stats:/opt/couchbase/var/lib/stats "
 
 
 ENV PATH=$PATH:/opt/couchbase/bin:/opt/couchbase/bin/tools:/opt/couchbase/bin/install

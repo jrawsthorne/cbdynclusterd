@@ -297,8 +297,8 @@ func (ds *DockerService) KillAllClusters(ctx context.Context) error {
 	return common.KillAllClusters(ctx, ds)
 }
 
-func (ds *DockerService) EnsureImageExists(ctx context.Context, serverVersion, os, arch string, useCommunity bool) (string, error) {
-	nodeVersion, err := common.ParseServerVersion(serverVersion, os, arch, useCommunity)
+func (ds *DockerService) EnsureImageExists(ctx context.Context, serverVersion, os, arch string, useCommunity, serverlessMode bool) (string, error) {
+	nodeVersion, err := common.ParseServerVersion(serverVersion, os, arch, useCommunity, serverlessMode)
 	if err != nil {
 		return "", err
 	}

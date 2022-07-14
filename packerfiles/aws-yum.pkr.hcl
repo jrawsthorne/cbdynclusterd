@@ -36,6 +36,11 @@ variable "device_name" {
   type = string
 }
 
+variable "serverless_mode" {
+  type = bool
+  default = false
+}
+
 source "amazon-ebs" "yum" {
   ami_name      = var.ami_name
   instance_type = var.arch == "aarch64" ? "t4g.micro" : "t2.micro"
@@ -75,7 +80,8 @@ build {
       "sudo yum install -y /tmp/${var.build_pkg}",
       "rm /tmp/${var.build_pkg}",
       "sudo usermod -a -G couchbase ${var.ssh_username}",
-      "sudo chmod 770 /opt/couchbase/var/lib/couchbase"
+      "sudo chmod 770 /opt/couchbase/var/lib/couchbase",
+      "if [ ${var.serverless_mode} == 'true' ]; then sudo mkdir -p /etc/couchbase.d && sudo /bin/sh -c 'echo serverless > /etc/couchbase.d/config_profile' && sudo chmod 755 /etc/couchbase.d/config_profile; fi"
     ]
   }
 }

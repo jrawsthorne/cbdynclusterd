@@ -119,6 +119,7 @@ func (d *daemon) HttpCreateCluster(w http.ResponseWriter, r *http.Request) {
 			UseCommunityEdition: node.UseCommunityEdition,
 			OS:                  node.OS,
 			Arch:                node.Arch,
+			ServerlessMode:      node.ServerlessMode,
 		}
 		clusterOpts.Nodes = append(clusterOpts.Nodes, nodeOpts)
 		if node.Platform == "ec2" {
@@ -870,7 +871,7 @@ func (d *daemon) HttpBuildImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image, err := d.dockerService.EnsureImageExists(reqCtx, reqData.ServerVersion, reqData.OS, reqData.Arch, reqData.UseCommunityEdition)
+	image, err := d.dockerService.EnsureImageExists(reqCtx, reqData.ServerVersion, reqData.OS, reqData.Arch, reqData.UseCommunityEdition, reqData.ServerlessMode)
 	if err != nil {
 		writeJSONError(w, err)
 		return
