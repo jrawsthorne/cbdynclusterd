@@ -267,7 +267,7 @@ func newDaemon() *daemon {
 
 	readOnlyStore := store.NewReadOnlyMetaDataStore(d.metaStore)
 	d.dockerService = docker.NewDockerService(cli, config.AliasRepo, config.Docker, readOnlyStore)
-	d.cloudService = cloud.NewCloudService(config.DefaultCapellaEnv, config.Capella, readOnlyStore)
+	d.cloudService = cloud.NewCloudService(config.DefaultCapellaEnv, config.Capella, d.metaStore)
 	d.ec2Service = ec2.NewEC2Service(config.EC2, config.AliasRepo, readOnlyStore)
 
 	// Create a system context to use for system actions (like cleanups)
