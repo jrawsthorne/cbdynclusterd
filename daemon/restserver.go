@@ -942,6 +942,20 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 	}
 
 	clusterID := helper.NewRandomClusterID()
+
+	meta := store.ClusterMeta{
+		Owner:            dyncontext.ContextUser(reqCtx),
+		Timeout:          time.Now().Add(timeout),
+		Platform:         store.ClusterPlatformCloud,
+		UseSecure:        true,
+		CloudEnvironment: reqData.Environment,
+		CloudEnvName:     reqData.EnvName,
+	}
+	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
 	clusterOpts := cloud.ClusterSetupOptions{
 		Nodes:       nodes,
 		Environment: reqData.Environment,
@@ -952,28 +966,20 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 		Image:       reqData.Image,
 	}
 
-	cloudClusterID, err := d.cloudService.SetupCluster(reqCtx, clusterID, clusterOpts, helper.RestTimeout)
+	err = d.cloudService.SetupCluster(reqCtx, clusterID, clusterOpts, helper.RestTimeout)
 	if err != nil {
 		writeJSONError(w, err)
 		return
 	}
 
+	// update timeout to account for the time it takes to provision the cluster
+	err = d.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
+		meta.Timeout = time.Now().Add(timeout)
+		return meta, nil
+	})
+
 	dCtx, cancel := context.WithDeadline(reqCtx, time.Now().Add(helper.RestTimeout))
 	defer cancel()
-
-	meta := store.ClusterMeta{
-		Owner:            dyncontext.ContextUser(reqCtx),
-		Timeout:          time.Now().Add(timeout),
-		Platform:         store.ClusterPlatformCloud,
-		CloudClusterID:   cloudClusterID,
-		UseSecure:        true,
-		CloudEnvironment: reqData.Environment,
-		CloudEnvName:     reqData.EnvName,
-	}
-	if err := d.metaStore.CreateClusterMeta(clusterID, meta); err != nil {
-		writeJSONError(w, err)
-		return
-	}
 
 	c, err := d.cloudService.GetCluster(dCtx, clusterID)
 	if err != nil {

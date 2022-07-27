@@ -49,7 +49,7 @@ type CloudService struct {
 	envs       map[string]*store.CloudEnvironment
 	enabled    bool
 	client     *client
-	metaStore  *store.ReadOnlyMetaDataStore
+	metaStore  *store.MetaDataStore
 }
 
 func envFromConfig(config CapellaConfig) *store.CloudEnvironment {
@@ -65,7 +65,7 @@ func envFromConfig(config CapellaConfig) *store.CloudEnvironment {
 	}
 }
 
-func NewCloudService(defaultEnvKey string, config map[string]CapellaConfig, metaStore *store.ReadOnlyMetaDataStore) *CloudService {
+func NewCloudService(defaultEnvKey string, config map[string]CapellaConfig, metaStore *store.MetaDataStore) *CloudService {
 	envs := make(map[string]*store.CloudEnvironment)
 	for key, config := range config {
 		envs[key] = envFromConfig(config)
@@ -554,9 +554,9 @@ func (cs *CloudService) postClusterCreate(ctx context.Context, clusterID, cloudC
 }
 
 func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts ClusterSetupOptions,
-	maxRequestTimeout time.Duration) (string, error) {
+	maxRequestTimeout time.Duration) error {
 	if !cs.enabled {
-		return "", ErrCloudNotEnabled
+		return ErrCloudNotEnabled
 	}
 
 	log.Printf("Running SetupCluster for %s with %v", clusterID, opts.Nodes)
@@ -566,7 +566,7 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	if opts.EnvName != "" {
 		customEnv, ok := cs.envs[opts.EnvName]
 		if !ok {
-			return "", fmt.Errorf("environment %s not found", opts.EnvName)
+			return fmt.Errorf("environment %s not found", opts.EnvName)
 		}
 		env = customEnv
 	}
@@ -583,7 +583,7 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		case "gcp":
 			provider = ProviderHostedGCP
 		default:
-			return "", fmt.Errorf("provider %s is not supported", opts.Provider)
+			return fmt.Errorf("provider %s is not supported", opts.Provider)
 		}
 	}
 
@@ -649,7 +649,7 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	if opts.Image != "" {
 		serverVersion := serverVersionFromImageRegex.FindString(opts.Image)
 		if serverVersion == "" {
-			return "", fmt.Errorf("image %s does not contain a valid server version", opts.Image)
+			return fmt.Errorf("image %s does not contain a valid server version", opts.Image)
 		}
 		body.Override = &Override{
 			Image:  opts.Image,
@@ -663,14 +663,14 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 
 	res, err := cs.client.DoInternal(reqCtx, "POST", fmt.Sprintf(createClusterPath, env.TenantID), body, env)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			return "", fmt.Errorf("create cluster failed: reason could not be determined: %v", err)
+			return fmt.Errorf("create cluster failed: reason could not be determined: %v", err)
 		}
 		errorBody := string(bb)
 		// retry if the CIDR is already in use
@@ -678,7 +678,7 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 		if strings.Contains(errorBody, "ErrClusterInvalidCIDRNotUnique") {
 			return cs.SetupCluster(ctx, clusterID, opts, maxRequestTimeout)
 		}
-		return "", fmt.Errorf("create cluster failed: %d: %s", res.StatusCode, string(bb))
+		return fmt.Errorf("create cluster failed: %d: %s", res.StatusCode, string(bb))
 	}
 
 	type ID struct {
@@ -687,21 +687,33 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return "", err
+		return err
 	}
 	id := &ID{}
 	err = json.Unmarshal(b, id)
+	if err != nil {
+		return err
+	}
+
 	cloudClusterID := id.ID
+
+	err = cs.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
+		meta.CloudClusterID = cloudClusterID
+		return meta, nil
+	})
+	if err != nil {
+		return err
+	}
 
 	err = cs.postClusterCreate(ctx, clusterID, cloudClusterID, env, maxRequestTimeout)
 	if err != nil {
 		go func() {
 			cs.killCluster(ctx, clusterID, cloudClusterID, env)
 		}()
-		return "", err
+		return err
 	}
 
-	return cloudClusterID, nil
+	return nil
 }
 
 func (cs *CloudService) AddBucket(ctx context.Context, clusterID string, opts service.AddBucketOptions, connCtx service.ConnectContext) error {
