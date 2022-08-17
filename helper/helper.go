@@ -54,6 +54,7 @@ const (
 	PRebalanceStop           = "/controller/stopRebalance"
 	PPoolsNodes              = "/pools/nodes"
 	PBuckets                 = "/pools/default/buckets"
+	PStats                   = "/pools/default/stats/range"
 	PFailover                = "/controller/failOver"
 	PEject                   = "/controller/ejectNode"
 	PSetupServices           = "/node/controller/setupServices"

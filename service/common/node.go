@@ -839,7 +839,104 @@ func parseRebalanceProgress(status map[string]interface{}) int {
 	return int(progress*100) / cnt
 }
 
-func (n *Node) PollSampleBucket(s string) error {
+func (n *Node) pollSampleBucketCollections(s string) error {
+	type Metric struct {
+		Label string `json:"label"`
+		Value string `json:"value"`
+	}
+
+	type Stat struct {
+		Start            int64    `json:"start"`
+		Metric           []Metric `json:"metric"`
+		NodesAggregation string   `json:"nodesAggregation"`
+		ApplyFunctions   []string `json:"applyFunctions"`
+	}
+
+	type Value []interface{}
+
+	type Data struct {
+		Values []Value `json:"values"`
+	}
+
+	type StatResponse struct {
+		Data []Data `json:"data"`
+	}
+
+	body := []Stat{{
+		Start: -1,
+		Metric: []Metric{
+			{
+				Label: "name",
+				Value: "kv_collection_item_count",
+			},
+			{
+				Label: "bucket",
+				Value: s,
+			},
+			{
+				Label: "scope",
+				Value: "_default",
+			},
+			{
+				Label: "collection",
+				Value: "_default",
+			},
+		},
+		NodesAggregation: "sum",
+		ApplyFunctions: []string{
+			"sum",
+		},
+	}}
+
+	jsonBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	params := &helper.RestCall{
+		ExpectedCode: 200,
+		Method:       "POST",
+		Path:         helper.PStats,
+		Cred:         n.RestLogin,
+		Body:         string(jsonBytes),
+	}
+
+	deadline := time.Now().Add(8 * time.Minute)
+
+	for {
+		if time.Now().After(deadline) {
+			return errors.New("Timeout while loading sample bucket.")
+		}
+
+		resp, err := helper.RestRetryer(helper.RestRetry, params, helper.GetResponse)
+		if err != nil {
+			return err
+		}
+
+		var parsed []StatResponse
+		if err := json.Unmarshal([]byte(resp), &parsed); err != nil {
+			return err
+		}
+
+		if len(parsed) == 0 || len(parsed[0].Data) == 0 || len(parsed[0].Data[0].Values) == 0 {
+			continue
+		}
+
+		// format is [timestamp, value]
+		values := parsed[0].Data[0].Values[0]
+		count, err := strconv.ParseFloat(values[1].(string), 64)
+		if err != nil {
+			return err
+		}
+
+		if count == helper.SampleBucketsCount[s] {
+			glog.Infof("Sample bucket %s is loaded", s)
+			return nil
+		}
+	}
+}
+
+func (n *Node) pollSampleBucket(s string) error {
 	params := &helper.RestCall{
 		ExpectedCode: 200,
 		Method:       "GET",
@@ -861,13 +958,22 @@ func (n *Node) PollSampleBucket(s string) error {
 		}
 
 		basicStats := parsed["basicStats"].(map[string]interface{})
-		if basicStats["itemCount"].(float64) == helper.SampleBucketsCount[s] || basicStats["itemCount"].(float64) >= 2*helper.SampleBucketsCount[s] {
+		if basicStats["itemCount"].(float64) == helper.SampleBucketsCount[s] {
 			glog.Infof("Sample bucket %s is loaded", s)
 			return nil
 		}
 		if time.Now().After(deadline) {
 			return errors.New("Timeout while loading sample bucket.")
 		}
+	}
+}
+
+func (n *Node) PollSampleBucket(s string) error {
+	version := n.VersionTuple()
+	if version.Major >= 7 {
+		return n.pollSampleBucketCollections(s)
+	} else {
+		return n.pollSampleBucket(s)
 	}
 }
 
