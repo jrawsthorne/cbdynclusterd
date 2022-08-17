@@ -14,7 +14,7 @@ import (
 	"github.com/couchbaselabs/cbdynclusterd/service"
 )
 
-func NewNode(hostname string, connCtx service.ConnectContext) *Node {
+func NewNode(hostname string, clusterVersion string, connCtx service.ConnectContext) *Node {
 	restUsername := helper.RestUser
 	if connCtx.RestUsername != "" {
 		restUsername = connCtx.RestUsername
@@ -38,16 +38,18 @@ func NewNode(hostname string, connCtx service.ConnectContext) *Node {
 		RestLogin: &helper.Cred{Username: restUsername, Password: restPassword, Hostname: hostname, Port: helper.GetRestPort(connCtx.UseSecure), Secure: connCtx.UseSecure},
 		N1qlLogin: &helper.Cred{Username: restUsername, Password: restPassword, Hostname: hostname, Port: helper.GetN1qlPort(connCtx.UseSecure), Secure: connCtx.UseSecure},
 		FtsLogin:  &helper.Cred{Username: restUsername, Password: restPassword, Hostname: hostname, Port: helper.GetFtsPort(connCtx.UseSecure), Secure: connCtx.UseSecure},
+		Version:   clusterVersion,
 	}
 }
 
 func SetupCluster(opts ClusterSetupOptions, connCtx service.ConnectContext) (string, error) {
 	services := opts.Services
+	clusterVersion := opts.Nodes[0].InitialServerVersion
 
 	var nodes []*Node
 	for i, service := range services {
 		hostname := opts.Nodes[i].IPv4Address
-		node := NewNode(hostname, connCtx)
+		node := NewNode(hostname, clusterVersion, connCtx)
 		node.Services = service
 		nodes = append(nodes, node)
 	}
@@ -104,7 +106,7 @@ func AddSampleBucket(ctx context.Context, s service.ClusterService, clusterID st
 		return errors.New("no nodes available")
 	}
 
-	node := NewNode(c.Nodes[0].IPv4Address, connCtx)
+	node := NewNode(c.Nodes[0].IPv4Address, c.Nodes[0].InitialServerVersion, connCtx)
 
 	return node.LoadSample(opts.SampleBucket)
 }
@@ -121,7 +123,7 @@ func AddBucket(ctx context.Context, s service.ClusterService, clusterID string, 
 		return errors.New("no nodes available")
 	}
 
-	node := NewNode(c.Nodes[0].IPv4Address, connCtx)
+	node := NewNode(c.Nodes[0].IPv4Address, c.Nodes[0].InitialServerVersion, connCtx)
 
 	return node.CreateBucket(&cluster.Bucket{
 		Name:              opts.Name,
@@ -145,7 +147,7 @@ func SetupCertAuth(ctx context.Context, s service.ClusterService, clusterID stri
 	clusterVersion := initialNodes[0].InitialServerVersion
 	var nodes []Node
 	for _, node := range initialNodes {
-		nodes = append(nodes, *NewNode(node.IPv4Address, connCtx))
+		nodes = append(nodes, *NewNode(node.IPv4Address, node.InitialServerVersion, connCtx))
 	}
 
 	return setupCertAuth(opts.UserName, opts.UserEmail, nodes, clusterVersion, opts.NumRoots)
@@ -159,7 +161,7 @@ func SetupClusterEncryption(ctx context.Context, s service.ClusterService, clust
 
 	var nodes []Node
 	for _, node := range c.Nodes {
-		nodes = append(nodes, *NewNode(node.IPv4Address, connCtx))
+		nodes = append(nodes, *NewNode(node.IPv4Address, node.InitialServerVersion, connCtx))
 	}
 
 	return setupClusterEncryption(nodes, opts)
@@ -178,7 +180,7 @@ func AddCollection(ctx context.Context, s service.ClusterService, clusterID stri
 		return errors.New("no nodes available")
 	}
 
-	node := NewNode(c.Nodes[0].IPv4Address, connCtx)
+	node := NewNode(c.Nodes[0].IPv4Address, c.Nodes[0].InitialServerVersion, connCtx)
 
 	return node.CreateCollection(&cluster.Collection{
 		Name:       opts.Name,
@@ -233,7 +235,7 @@ func AddUser(ctx context.Context, s service.ClusterService, clusterID string, op
 		return errors.New("no nodes available")
 	}
 
-	node := NewNode(c.Nodes[0].IPv4Address, connCtx)
+	node := NewNode(c.Nodes[0].IPv4Address, c.Nodes[0].InitialServerVersion, connCtx)
 
 	return node.CreateUser(opts.User)
 }
@@ -253,7 +255,7 @@ func RunCBCollect(ctx context.Context, s service.ClusterService, clusterID strin
 
 	var nodes []*Node
 	for _, node := range c.Nodes {
-		node := NewNode(node.IPv4Address, connCtx)
+		node := NewNode(node.IPv4Address, node.InitialServerVersion, connCtx)
 		nodes = append(nodes, node)
 		go func(recv chan Resp, node *Node) {
 			bytes, err := node.RunCBCollect()

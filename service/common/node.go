@@ -40,7 +40,7 @@ const (
 type RespNode struct {
 	ClusterMembership string `json:"clusterMembership"`
 	HostName          string `json:"hostname"`
-	Status            string `json:"status""`
+	Status            string `json:"status"`
 	NSOtpNode         string `json:"otpNode"`
 }
 
@@ -502,13 +502,9 @@ func (n *Node) CreateBucket(conf *cluster.Bucket) error {
 
 	if conf.StorageBackend != "" {
 		// storageBackend supported on >= 7.1
-		major, minor, _ := helper.Tuple(n.Version)
-		if major > 7 || (major == 7 && minor >= 1) {
-			// storageBackend supported on >= 7.1
+		version := n.VersionTuple()
+		if version.Major > 7 || (version.Major == 7 && version.Minor >= 1) {
 			body = fmt.Sprintf("%s&storageBackend=%s", body, conf.StorageBackend)
-			if major > 7 || (major == 7 && minor >= 1) {
-				body = fmt.Sprintf("%s&storageBackend=%s", body, conf.StorageBackend)
-			}
 		}
 	}
 
@@ -778,7 +774,6 @@ CompressionLoop:
 }
 
 func (n *Node) PollRebalance() error {
-	var err error
 	params := &helper.RestCall{
 		ExpectedCode: 200,
 		Method:       "GET",
@@ -826,7 +821,6 @@ func (n *Node) PollRebalance() error {
 		}
 	}
 
-	return err
 }
 
 func parseRebalanceProgress(status map[string]interface{}) int {
@@ -1257,8 +1251,8 @@ func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKe
 	var caPrivateKey = caPrivateKeys[rootIndex]
 	var ca = cas[rootIndex]
 
-	major, minor, _ := helper.Tuple(clusterVersion)
-	supportsMultipleRoots := major > 7 || (major == 7 && minor >= 1)
+	version := n.VersionTuple()
+	supportsMultipleRoots := version.Major > 7 || (version.Major == 7 && version.Minor >= 1)
 
 	nodePrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -1381,4 +1375,8 @@ func (n *Node) RunCBCollect() ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (n *Node) VersionTuple() helper.VersionTuple {
+	return helper.Tuple(n.Version)
 }
