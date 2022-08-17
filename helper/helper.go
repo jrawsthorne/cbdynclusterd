@@ -171,19 +171,29 @@ func RestRetryer(retry int, params *RestCall, fn func(*RestCall) (string, error)
 	return body, nil
 }
 
-func Tuple(version string) (int, int, int) {
+type VersionTuple struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+func (v *VersionTuple) String() string {
+	return fmt.Sprintf("%d-%d-%d", v.Major, v.Minor, v.Patch)
+}
+
+func Tuple(version string) VersionTuple {
 	v := strings.Split(version, "-")[0]
 	parsed := strings.Split(v, ".")
 
 	if len(parsed) != 3 {
-		return 0, 0, 0
+		return VersionTuple{Major: 0, Minor: 0, Patch: 0}
 	}
 
 	major, _ := strconv.Atoi(parsed[0])
 	minor, _ := strconv.Atoi(parsed[1])
 	patch, _ := strconv.Atoi(parsed[2])
 
-	return major, minor, patch
+	return VersionTuple{Major: major, Minor: minor, Patch: patch}
 }
 
 func GetResponse(params *RestCall) (string, error) {

@@ -36,32 +36,22 @@ type Manager struct {
 }
 
 type Pools struct {
-	Name         string `json:name`
-	Uri          string `json:uri`
-	StreamingUri string `json:streamingUri`
+	Name         string `json:"name"`
+	Uri          string `json:"uri"`
+	StreamingUri string `json:"streamingUri"`
 }
 
 type RefInfo struct {
 	ClusterVersion string  `json:"implementationVersion"`
-	Pools          []Pools `json:"pools""`
+	Pools          []Pools `json:"pools"`
 	ClusterId      string
 	IsEnterprise   bool `json:"isEnterprise"`
-}
-
-type VersionTuple struct {
-	Major int
-	Minor int
-	Patch int
-}
-
-func (v *VersionTuple) String() string {
-	return fmt.Sprintf("%d-%d-%d", v.Major, v.Minor, v.Patch)
 }
 
 type Config struct {
 	MemoryQuota   string
 	User          *helper.UserOption
-	Version       VersionTuple
+	Version       helper.VersionTuple
 	StorageMode   string
 	Bucket        *helper.BucketOption
 	UseHostname   bool
@@ -198,10 +188,7 @@ func (m *Manager) pollJoinReadyAll(epnode *Node) error {
 func (m *Manager) setupNewCluster() (string, error) {
 	m.epNode = 0 // select the first node as entry point
 	epnode := m.Nodes[m.epNode]
-	version, err := getVersion(epnode)
-	if err != nil {
-		return "", err
-	}
+	version := epnode.VersionTuple()
 
 	memoryQuota, err := strconv.Atoi(m.Config.MemoryQuota)
 	if err != nil {
@@ -299,29 +286,6 @@ func (m *Manager) setupNewCluster() (string, error) {
 	}
 
 	return fmt.Sprintf("http://%s:%s", epnode.HostName, epnode.Port), nil
-}
-
-func getVersion(node *Node) (*VersionTuple, error) {
-	node.Update(false)
-	info, err := node.GetInfo()
-	if err != nil {
-		return nil, err
-	}
-
-	version := info.ClusterVersion
-
-	parsed := strings.Split(version, ".")
-	if len(parsed) != 3 {
-		return nil, errors.New("Unable to parse server version")
-	}
-	major, _ := strconv.Atoi(parsed[0])
-	minor, _ := strconv.Atoi(parsed[1])
-	patch, _ := strconv.Atoi(parsed[2])
-	return &VersionTuple{
-		Major: major,
-		Minor: minor,
-		Patch: patch,
-	}, nil
 }
 
 func (m *Manager) PollCompressionMode(bucket, mode string) error {

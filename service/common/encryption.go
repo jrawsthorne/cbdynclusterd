@@ -42,10 +42,7 @@ func setupClusterEncryption(nodes []Node, opts service.SetupClusterEncryptionOpt
 
 	// change level
 	if opts.Level != "" {
-		version, err := getVersion(&epnode)
-		if err != nil {
-			return err
-		}
+		version := epnode.VersionTuple()
 		// Strict encryption level is hidden behind a flag in 6.6.5
 		if opts.Level == "strict" && version.Major == 6 {
 			if err := epnode.AllowStrictEncryption(); err != nil {

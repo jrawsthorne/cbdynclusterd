@@ -747,7 +747,7 @@ func (cs *CloudService) addSampleBucket(ctx context.Context, clusterID, cloudClu
 		return err
 	}
 
-	node := common.NewNode(c.Nodes[0].IPv4Address, connCtx)
+	node := common.NewNode(c.Nodes[0].IPv4Address, c.Nodes[0].InitialServerVersion, connCtx)
 
 	if err = node.WaitForBucketHealthy(name); err != nil {
 		return err
