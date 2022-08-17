@@ -93,6 +93,7 @@ func (cs *CloudService) getCluster(ctx context.Context, cloudClusterID string, e
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -130,6 +131,7 @@ func (cs *CloudService) addBucket(ctx context.Context, clusterID, cloudClusterID
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -162,6 +164,7 @@ func (cs *CloudService) addIP(ctx context.Context, clusterID, cloudClusterID, ip
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -187,6 +190,7 @@ func (cs *CloudService) killCluster(ctx context.Context, clusterID, cloudCluster
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -215,6 +219,7 @@ func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID s
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	// TODO: Use public API when AV-27634 fixed
 
@@ -222,6 +227,7 @@ func (cs *CloudService) addUser(ctx context.Context, clusterID, cloudClusterID s
 	// if err != nil {
 	// 	return err
 	// }
+	// defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -241,6 +247,7 @@ func (cs *CloudService) bucketHealth(ctx context.Context, clusterID, cloudCluste
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -300,6 +307,7 @@ func (cs *CloudService) GetCluster(ctx context.Context, clusterID string) (*clus
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -376,6 +384,7 @@ func (cs *CloudService) getAllClusters(ctx context.Context, env *store.CloudEnvi
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -656,6 +665,7 @@ func (cs *CloudService) SetupCluster(ctx context.Context, clusterID string, opts
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
@@ -733,6 +743,7 @@ func (cs *CloudService) addSampleBucket(ctx context.Context, clusterID, cloudClu
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		bb, err := ioutil.ReadAll(res.Body)
