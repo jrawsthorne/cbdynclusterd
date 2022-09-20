@@ -81,7 +81,7 @@ build {
       "rm /tmp/${var.build_pkg}",
       "sudo usermod -a -G couchbase ${var.ssh_username}",
       "sudo chmod 770 /opt/couchbase/var/lib/couchbase",
-      "if [ \"${var.serverless_mode}\" = true ]; then sudo mkdir -p /etc/couchbase.d && sudo /bin/sh -c 'echo serverless > /etc/couchbase.d/config_profile' && sudo chmod 755 /etc/couchbase.d/config_profile; fi"
+      "if [ ${var.serverless_mode} == 'true' ]; then sudo mkdir -p /etc/couchbase.d && sudo /bin/sh -c 'echo serverless > /etc/couchbase.d/config_profile' && sudo chmod 755 /etc/couchbase.d/config_profile; fi"
     ]
   }
 }

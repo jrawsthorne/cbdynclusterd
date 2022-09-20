@@ -31,18 +31,17 @@ var (
 )
 
 type EC2Service struct {
-	enabled          bool
-	route53Enabled   bool
-	metaStore        *store.ReadOnlyMetaDataStore
-	client           *ec2.Client
-	route53Client    *route53.Client
-	aliasRepoPath    string
-	securityGroup    string
-	keyName          string
-	keyPath          string
-	downloadPassword string
-	domainName       string
-	hostedZoneId     string
+	enabled        bool
+	route53Enabled bool
+	metaStore      *store.ReadOnlyMetaDataStore
+	client         *ec2.Client
+	route53Client  *route53.Client
+	aliasRepoPath  string
+	securityGroup  string
+	keyName        string
+	keyPath        string
+	domainName     string
+	hostedZoneId   string
 
 	buildingImages map[string]*[]chan error
 	mu             sync.Mutex
@@ -166,19 +165,22 @@ func (s *EC2Service) buildAMI(imageName string, nodeVersion *common.NodeVersion)
 	defer resp.Body.Close()
 
 	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return err
+	}
 
 	err = CallPacker(PackerOptions{
-		BuildPkg: nodeVersion.ToPkgName(),
-		AmiName:  imageName,
-		Arch:     nodeVersion.Arch,
-		OS:       nodeVersion.OS,
+		BuildPkg:       nodeVersion.ToPkgName(),
+		AmiName:        imageName,
+		Arch:           nodeVersion.Arch,
+		OS:             nodeVersion.OS,
+		ServerlessMode: nodeVersion.ServerlessMode,
 	})
 
 	return err
 }
 
 func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.NodeVersion, clusterID string) error {
-
 	imageName := nodeVersion.ToImageName("cbdyncluster")
 
 	out, err := s.client.DescribeImages(ctx, &ec2.DescribeImagesInput{
@@ -465,6 +467,9 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 	err = ec2.NewInstanceRunningWaiter(s.client).Wait(ctx, &ec2.DescribeInstancesInput{
 		InstanceIds: instanceIds,
 	}, 120*time.Second)
+	if err != nil {
+		return nil, err
+	}
 
 	if s.route53Enabled {
 		cluster, err := s.GetCluster(ctx, clusterID)
