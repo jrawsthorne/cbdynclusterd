@@ -82,7 +82,11 @@ func ConnString(ctx context.Context, s service.ClusterService, clusterID string,
 
 	var addresses []string
 	for _, node := range c.Nodes {
-		addresses = append(addresses, node.IPv4Address)
+		hostname := node.IPv4Address
+		if node.Hostname != "" {
+			hostname = node.Hostname
+		}
+		addresses = append(addresses, hostname)
 	}
 
 	scheme := "couchbase"
