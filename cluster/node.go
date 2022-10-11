@@ -9,4 +9,5 @@ type Node struct {
 	IPv4Address          string
 	IPv6Address          string
 	Version              string
+	Hostname             string
 }

@@ -70,13 +70,18 @@ func jsonifyError(err error) ErrorJSON {
 }
 
 func jsonifyNode(node *cluster.Node) NodeJSON {
+	hostname := node.IPv4Address
+	if node.Hostname != "" {
+		hostname = node.Hostname
+	}
+
 	return NodeJSON{
 		ID:                   node.ContainerID,
 		ContainerName:        node.ContainerName,
 		State:                node.State,
 		Name:                 node.Name,
 		InitialServerVersion: node.InitialServerVersion,
-		IPv4Address:          node.IPv4Address,
+		IPv4Address:          hostname,
 		IPv6Address:          node.IPv6Address,
 	}
 }

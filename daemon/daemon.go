@@ -239,7 +239,11 @@ func (d *daemon) getAndPrintClusters() {
 	for _, c := range clusters {
 		log.Printf("  %s [Owner: %s, Creator: %s, Timeout: %s]", c.ID, c.Owner, c.Creator, c.Timeout.Sub(time.Now()).Round(time.Second))
 		for _, node := range c.Nodes {
-			log.Printf("    %-16s  %-20s %-10s %-20s", node.ContainerID, node.Name, node.InitialServerVersion, node.IPv4Address)
+			hostname := node.IPv4Address
+			if node.Hostname != "" {
+				hostname = node.Hostname
+			}
+			log.Printf("    %-16s  %-20s %-10s %-20s", node.ContainerID, node.Name, node.InitialServerVersion, hostname)
 		}
 	}
 }
