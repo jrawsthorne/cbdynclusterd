@@ -147,13 +147,12 @@ func SetupCertAuth(ctx context.Context, s service.ClusterService, clusterID stri
 	}
 
 	initialNodes := c.Nodes
-	clusterVersion := initialNodes[0].InitialServerVersion
 	var nodes []Node
 	for _, node := range initialNodes {
 		nodes = append(nodes, *NewNode(node.IPv4Address, node.InitialServerVersion, connCtx))
 	}
 
-	return setupCertAuth(opts.UserName, opts.UserEmail, nodes, clusterVersion, opts.NumRoots)
+	return setupCertAuth(opts.UserName, opts.UserEmail, nodes, opts.NumRoots)
 }
 
 func SetupClusterEncryption(ctx context.Context, s service.ClusterService, clusterID string, opts service.SetupClusterEncryptionOptions, connCtx service.ConnectContext) error {

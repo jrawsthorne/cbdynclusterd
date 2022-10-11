@@ -1353,7 +1353,7 @@ func newSession(sshLogin *helper.Cred) (*ssh.Session, error) {
 	return session, nil
 }
 
-func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKey, now time.Time, clusterVersion string, rootIndex int) error {
+func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKey, now time.Time, rootIndex int) error {
 	var caPrivateKey = caPrivateKeys[rootIndex]
 	var ca = cas[rootIndex]
 
@@ -1504,6 +1504,95 @@ func (n *Node) CreateHostsFile() error {
 	err = session.Run(fmt.Sprintf("echo '127.0.0.1 %s' | sudo tee -a /etc/hosts", n.HostName))
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (n *Node) SetupTrustedCert(caPath, privPath, pubPath, clusterVersion string) error {
+	version := n.VersionTuple()
+	supportsMultipleRoots := version.Major > 7 || (version.Major == 7 && version.Minor >= 1)
+
+	caBytes, err := os.ReadFile(caPath)
+	if err != nil {
+		return err
+	}
+
+	privBytes, err := os.ReadFile(privPath)
+	if err != nil {
+		return err
+	}
+
+	pubBytes, err := os.ReadFile(pubPath)
+	if err != nil {
+		return err
+	}
+
+	client, err := newClient(n.SshLogin)
+	if err != nil {
+		return fmt.Errorf("failed to create node ssh client: %w", err)
+	}
+
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return fmt.Errorf("failed to create node sftp client: %w", err)
+	}
+
+	err = sftpClient.MkdirAll("/opt/couchbase/var/lib/couchbase/inbox")
+	if err != nil {
+		return fmt.Errorf("failed to create node inbox: %w", err)
+	}
+
+	if supportsMultipleRoots {
+		err = sftpClient.MkdirAll("/opt/couchbase/var/lib/couchbase/inbox/CA")
+		if err != nil {
+			return fmt.Errorf("failed to create CA inbox: %w", err)
+		}
+
+		caFile, err := sftpClient.Create("/opt/couchbase/var/lib/couchbase/inbox/CA/ca.pem")
+		if err != nil {
+			return err
+		}
+
+		_, err = caFile.Write(caBytes)
+		if err != nil {
+			return err
+		}
+
+		err = cbcerthelper.LoadTrustedCAs(n.RestLogin.Username, n.RestLogin.Password, n.HostName)
+		if err != nil {
+			return fmt.Errorf("failed to load trusted CAs: %w", err)
+		}
+	} else {
+		err = cbcerthelper.UploadClusterCA(caBytes, n.RestLogin.Username, n.RestLogin.Password, n.HostName)
+		if err != nil {
+			return fmt.Errorf("failed to upload cluster CA: %w", err)
+		}
+	}
+
+	pubFile, err := sftpClient.Create("/opt/couchbase/var/lib/couchbase/inbox/chain.pem")
+	if err != nil {
+		return err
+	}
+
+	_, err = pubFile.Write(pubBytes)
+	if err != nil {
+		return err
+	}
+
+	privFile, err := sftpClient.Create("/opt/couchbase/var/lib/couchbase/inbox/pkey.key")
+	if err != nil {
+		return err
+	}
+
+	_, err = privFile.Write(privBytes)
+	if err != nil {
+		return err
+	}
+
+	err = cbcerthelper.ReloadClusterCert(n.RestLogin.Username, n.RestLogin.Password, n.HostName)
+	if err != nil {
+		return fmt.Errorf("failed to reload node cert: %w", err)
 	}
 
 	return nil

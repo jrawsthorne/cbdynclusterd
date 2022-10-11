@@ -12,7 +12,7 @@ import (
 	"github.com/couchbaselabs/cbdynclusterd/service"
 )
 
-func setupCertAuth(username, email string, nodes []Node, clusterVersion string, numRoots int) (*service.CertAuthResult, error) {
+func setupCertAuth(username, email string, nodes []Node, numRoots int) (*service.CertAuthResult, error) {
 
 	var rootKeys = []*rsa.PrivateKey{}
 	var rootCerts = []*x509.Certificate{}
@@ -37,7 +37,7 @@ func setupCertAuth(username, email string, nodes []Node, clusterVersion string, 
 
 	for i, node := range nodes {
 		var rootIndex = i % len(rootCerts)
-		if err := node.SetupCert(rootCerts, rootKeys, now, clusterVersion, rootIndex); err != nil {
+		if err := node.SetupCert(rootCerts, rootKeys, now, rootIndex); err != nil {
 			return nil, err
 		}
 	}
