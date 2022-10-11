@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -31,17 +32,20 @@ var (
 )
 
 type EC2Service struct {
-	enabled        bool
-	route53Enabled bool
-	metaStore      *store.ReadOnlyMetaDataStore
-	client         *ec2.Client
-	route53Client  *route53.Client
-	aliasRepoPath  string
-	securityGroup  string
-	keyName        string
-	keyPath        string
-	domainName     string
-	hostedZoneId   string
+	enabled               bool
+	route53Enabled        bool
+	metaStore             *store.ReadOnlyMetaDataStore
+	client                *ec2.Client
+	route53Client         *route53.Client
+	aliasRepoPath         string
+	securityGroup         string
+	keyName               string
+	keyPath               string
+	domainName            string
+	hostedZoneId          string
+	trustedRootCAPath     string
+	trustedPrivateKeyPath string
+	trustedCertPath       string
 
 	buildingImages map[string]*[]chan error
 	mu             sync.Mutex
@@ -58,6 +62,12 @@ type EC2Config struct {
 	DomainName string `toml:"domain-name"`
 	// Hosted zone in route53 to use to create SRV records
 	HostedZoneId string `toml:"hosted-zone-id"`
+	// Path to a trusted CA that signed the cert
+	TrustedRootCAPath string `toml:"trusted-root-ca-path"`
+	// Path to the private key of the signed cert
+	TrustedPrivateKeyPath string `toml:"trusted-private-key-path"`
+	// Path tp the public key of the signed cert
+	TrustedCertPath string `toml:"trusted-cert-path"`
 }
 
 func NewEC2Service(config EC2Config, aliasRepoPath string, metaStore *store.ReadOnlyMetaDataStore) *EC2Service {
@@ -79,17 +89,20 @@ func NewEC2Service(config EC2Config, aliasRepoPath string, metaStore *store.Read
 	log.Printf("Route53 enabled: %t", route53Enabled)
 
 	return &EC2Service{
-		enabled:        enabled,
-		route53Enabled: route53Enabled,
-		metaStore:      metaStore,
-		client:         client,
-		aliasRepoPath:  aliasRepoPath,
-		keyName:        config.KeyName,
-		keyPath:        config.KeyPath,
-		securityGroup:  config.SecurityGroup,
-		route53Client:  route53Client,
-		hostedZoneId:   config.HostedZoneId,
-		domainName:     config.DomainName,
+		enabled:               enabled,
+		route53Enabled:        route53Enabled,
+		metaStore:             metaStore,
+		client:                client,
+		aliasRepoPath:         aliasRepoPath,
+		keyName:               config.KeyName,
+		keyPath:               config.KeyPath,
+		securityGroup:         config.SecurityGroup,
+		route53Client:         route53Client,
+		hostedZoneId:          config.HostedZoneId,
+		domainName:            config.DomainName,
+		trustedRootCAPath:     config.TrustedRootCAPath,
+		trustedPrivateKeyPath: config.TrustedPrivateKeyPath,
+		trustedCertPath:       config.TrustedCertPath,
 
 		buildingImages: make(map[string]*[]chan error),
 	}
@@ -830,15 +843,61 @@ func (s *EC2Service) terminateInstances(ctx context.Context, instanceIds []strin
 }
 
 func (s *EC2Service) RunCBCollect(ctx context.Context, clusterID string) (*service.CBCollectResult, error) {
-	meta, err := s.metaStore.GetClusterMeta(clusterID)
+	connCtx, err := s.connectionContext(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	if meta.OS == "" {
-		return nil, errors.New("cluster does not have an OS specified")
-	}
+	return common.RunCBCollect(ctx, s, clusterID, connCtx)
+}
+
+func (s *EC2Service) connectionContext(clusterID string) (service.ConnectContext, error) {
 	var connCtx service.ConnectContext
+	meta, err := s.metaStore.GetClusterMeta(clusterID)
+	if err != nil {
+		return connCtx, err
+	}
+
+	if meta.OS == "" {
+		return connCtx, errors.New("cluster does not have an OS specified")
+	}
+
 	connCtx.SshKeyPath = s.keyPath
 	connCtx.SshUsername = osToSSHUsername[meta.OS]
-	return common.RunCBCollect(ctx, s, clusterID, connCtx)
+
+	return connCtx, nil
+}
+
+func (s *EC2Service) SetupTrustedCert(ctx context.Context, clusterID string) error {
+	connCtx, err := s.connectionContext(clusterID)
+	if err != nil {
+		return err
+	}
+
+	c, err := s.GetCluster(ctx, clusterID)
+	if err != nil {
+		return err
+	}
+
+	recv := make(chan error)
+
+	var nodes []*common.Node
+	for _, node := range c.Nodes {
+		version := node.InitialServerVersion
+		node := common.NewNode(node.Hostname, version, connCtx)
+		nodes = append(nodes, node)
+		go func(recv chan error, node *common.Node) {
+			err := node.SetupTrustedCert(s.trustedRootCAPath, s.trustedPrivateKeyPath, s.trustedCertPath, version)
+			recv <- err
+		}(recv, node)
+	}
+
+	for range nodes {
+		hostsErr := <-recv
+		if hostsErr != nil {
+			err = hostsErr
+			continue
+		}
+	}
+
+	return err
 }

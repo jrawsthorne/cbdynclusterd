@@ -440,6 +440,36 @@ func (d *daemon) HttpSetupClusterEncryption(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(200)
 }
 
+func (d *daemon) HttpSetupTrustedCert(w http.ResponseWriter, r *http.Request) {
+	reqCtx, err := getHttpContext(r)
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	clusterID := mux.Vars(r)["cluster_id"]
+
+	meta, err := d.metaStore.GetClusterMeta(clusterID)
+	if err != nil {
+		log.Printf("Encountered unregistered cluster: %s", clusterID)
+		writeJSONError(w, err)
+		return
+	}
+
+	if meta.Platform != store.ClusterPlatformEC2 {
+		writeJSONError(w, errors.New("can only setup trusted cert on ec2"))
+		return
+	}
+
+	err = d.ec2Service.SetupTrustedCert(reqCtx, clusterID)
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
+
+	w.WriteHeader(200)
+}
+
 func (d *daemon) HttpUpdateCluster(w http.ResponseWriter, r *http.Request) {
 	reqCtx, err := getHttpContext(r)
 	if err != nil {
@@ -1086,5 +1116,6 @@ func (d *daemon) createRESTRouter() *mux.Router {
 	r.HandleFunc("/images", d.HttpBuildImage).Methods("POST")
 	r.HandleFunc("/register-cloud-cluster", d.HttpRegisterCloudCluster).Methods("POST")
 	r.HandleFunc("/cluster/{cluster_id}/cbcollect", d.HttpCBCollect).Methods("GET")
+	r.HandleFunc("/cluster/{cluster_id}/setup-trusted-cert", d.HttpSetupTrustedCert).Methods("POST")
 	return r
 }
