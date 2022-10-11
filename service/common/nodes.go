@@ -210,7 +210,7 @@ func CreateNodesToAllocate(nodes []service.CreateNodeOptions, aliasRepoPath stri
 			VersionInfo:   nodeVersion,
 		}
 		if nodeToAllocate.Name == "" {
-			nodeToAllocate.Name = fmt.Sprintf("node_%d", nodeIdx+1)
+			nodeToAllocate.Name = fmt.Sprintf("node%d", nodeIdx+1)
 		}
 
 		nodesToAllocate = append(nodesToAllocate, nodeToAllocate)

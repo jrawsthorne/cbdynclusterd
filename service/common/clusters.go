@@ -49,6 +49,9 @@ func SetupCluster(opts ClusterSetupOptions, connCtx service.ConnectContext) (str
 	var nodes []*Node
 	for i, service := range services {
 		hostname := opts.Nodes[i].IPv4Address
+		if opts.UseHostname && opts.Nodes[i].Hostname != "" {
+			hostname = opts.Nodes[i].Hostname
+		}
 		node := NewNode(hostname, clusterVersion, connCtx)
 		node.Services = service
 		nodes = append(nodes, node)
@@ -279,4 +282,33 @@ func RunCBCollect(ctx context.Context, s service.ClusterService, clusterID strin
 	}
 
 	return &service.CBCollectResult{Collections: collections}, nil
+}
+
+func UpdateHostsFile(ctx context.Context, s service.ClusterService, clusterID string, connCtx service.ConnectContext) error {
+	c, err := s.GetCluster(ctx, clusterID)
+	if err != nil {
+		return err
+	}
+
+	recv := make(chan error)
+
+	var nodes []*Node
+	for _, node := range c.Nodes {
+		node := NewNode(node.Hostname, node.InitialServerVersion, connCtx)
+		nodes = append(nodes, node)
+		go func(recv chan error, node *Node) {
+			err := node.CreateHostsFile()
+			recv <- err
+		}(recv, node)
+	}
+
+	for range nodes {
+		hostsErr := <-recv
+		if hostsErr != nil {
+			err = hostsErr
+			continue
+		}
+	}
+
+	return err
 }

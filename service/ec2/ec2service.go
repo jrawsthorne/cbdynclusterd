@@ -257,7 +257,7 @@ func (s *EC2Service) srvName(clusterID string, secure bool) string {
 
 }
 
-func (s *EC2Service) hasSrvRecord(ctx context.Context, clusterID string) (error, bool) {
+func (s *EC2Service) hasSrvRecord(ctx context.Context, clusterID string) (bool, error) {
 	// dns operations are atomic so either both (couchbase and couchbases) will exist or neither will
 	expectedRecords := 2
 
@@ -274,7 +274,7 @@ func (s *EC2Service) hasSrvRecord(ctx context.Context, clusterID string) (error,
 	out, err := s.route53Client.ListResourceRecordSets(ctx, &input)
 
 	if err != nil {
-		return err, false
+		return false, err
 	}
 
 	actualRecords := 0
@@ -285,7 +285,49 @@ func (s *EC2Service) hasSrvRecord(ctx context.Context, clusterID string) (error,
 		}
 	}
 
-	return nil, actualRecords == expectedRecords
+	return actualRecords == expectedRecords, nil
+}
+
+func (s *EC2Service) hasARecord(ctx context.Context, cluster *cluster.Cluster) (bool, error) {
+	// dns operations are atomic so either all exist or none will
+	expectedRecords := len(cluster.Nodes)
+
+	sort.Slice(cluster.Nodes, func(p, q int) bool {
+		return cluster.Nodes[p].Hostname < cluster.Nodes[q].Hostname
+	})
+	// lexicographically sorted first record
+	firstHostname := cluster.Nodes[0].Hostname
+
+	input := route53.ListResourceRecordSetsInput{
+		HostedZoneId:    aws.String(s.hostedZoneId),
+		StartRecordName: aws.String(firstHostname),
+		StartRecordType: route53types.RRTypeA,
+		MaxItems:        aws.Int32(int32(expectedRecords)),
+	}
+
+	out, err := s.route53Client.ListResourceRecordSets(ctx, &input)
+
+	if err != nil {
+		return false, err
+	}
+
+	actualRecords := 0
+
+	for _, record := range out.ResourceRecordSets {
+		if strings.Contains(*record.Name, cluster.ID) {
+			actualRecords += 1
+		}
+	}
+
+	return actualRecords == expectedRecords, nil
+}
+
+func (s *EC2Service) createARecords(ctx context.Context, cluster *cluster.Cluster) error {
+	return s.changeARecords(ctx, cluster, route53types.ChangeActionCreate)
+}
+
+func (s *EC2Service) removeARecords(ctx context.Context, cluster *cluster.Cluster) error {
+	return s.changeARecords(ctx, cluster, route53types.ChangeActionDelete)
 }
 
 func (s *EC2Service) removeSrvRecord(ctx context.Context, cluster *cluster.Cluster) error {
@@ -299,7 +341,7 @@ func (s *EC2Service) createSrvRecord(ctx context.Context, cluster *cluster.Clust
 func (s *EC2Service) changeSrvRecord(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) error {
 	hostnames := make([]string, 0, len(cluster.Nodes))
 	for _, node := range cluster.Nodes {
-		hostnames = append(hostnames, node.IPv4Address)
+		hostnames = append(hostnames, node.Hostname)
 	}
 
 	changes := make([]route53types.Change, 0, 2)
@@ -328,6 +370,34 @@ func (s *EC2Service) changeSrvRecord(ctx context.Context, cluster *cluster.Clust
 				Type:            route53types.RRTypeSrv,
 				ResourceRecords: records,
 				TTL:             aws.Int64(60),
+			},
+		})
+	}
+
+	_, err := s.route53Client.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
+		ChangeBatch: &route53types.ChangeBatch{
+			Changes: changes,
+		},
+		HostedZoneId: aws.String(s.hostedZoneId),
+	})
+
+	return err
+}
+
+func (s *EC2Service) changeARecords(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) error {
+	changes := make([]route53types.Change, 0, len(cluster.Nodes))
+	for _, node := range cluster.Nodes {
+		changes = append(changes, route53types.Change{
+			Action: action,
+			ResourceRecordSet: &route53types.ResourceRecordSet{
+				Name: aws.String(node.Hostname),
+				Type: route53types.RRTypeA,
+				ResourceRecords: []route53types.ResourceRecord{
+					{
+						Value: aws.String(node.IPv4Address),
+					},
+				},
+				TTL: aws.Int64(60),
 			},
 		})
 	}
@@ -466,18 +536,46 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 
 	err = ec2.NewInstanceRunningWaiter(s.client).Wait(ctx, &ec2.DescribeInstancesInput{
 		InstanceIds: instanceIds,
-	}, 120*time.Second)
+	}, 2*time.Minute)
 	if err != nil {
 		return nil, err
 	}
 
+	// create dns records as quickly as possible so they have time to propagate
 	if s.route53Enabled {
 		cluster, err := s.GetCluster(ctx, clusterID)
 		if err != nil {
 			return nil, err
 		}
 
+		err = s.createARecords(ctx, cluster)
+		if err != nil {
+			return nil, err
+		}
+
+		// srv records point to the custom hostnames
 		err = s.createSrvRecord(ctx, cluster)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if s.route53Enabled {
+		// we need to wait until the instance is ready before we can ssh in and update the hosts file
+		err = ec2.NewInstanceStatusOkWaiter(s.client).Wait(ctx, &ec2.DescribeInstanceStatusInput{
+			InstanceIds: instanceIds,
+		}, 5*time.Minute)
+		if err != nil {
+			return nil, err
+		}
+
+		connCtx, err := s.connectionContext(clusterID)
+		if err != nil {
+			return nil, err
+		}
+
+		// allow nodes to listen on custom hostnames
+		err = common.UpdateHostsFile(ctx, s, clusterID, connCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -536,13 +634,23 @@ func (s *EC2Service) getFilteredClusters(ctx context.Context, filters []types.Fi
 				clusterCreator = instanceCreator
 			}
 
+			hostname := *instance.PublicDnsName
+			nodeName := tags["com.couchbase.dyncluster.node_name"]
+
+			// use custom hostnames
+			if s.route53Enabled {
+				// e.g. node1-0e78c8d7.cbqeoc.com
+				hostname = fmt.Sprintf("%s-%s.%s", nodeName, clusterID, s.domainName)
+			}
+
 			nodes = append(nodes, &cluster.Node{
 				ContainerID:          *instance.InstanceId,
 				ContainerName:        tags["Name"],
 				State:                string(instance.State.Name),
-				Name:                 tags["com.couchbase.dyncluster.node_name"],
+				Name:                 nodeName,
 				InitialServerVersion: tags["com.couchbase.dyncluster.initial_server_version"],
-				IPv4Address:          *instance.PublicDnsName,
+				IPv4Address:          *instance.PublicIpAddress,
+				Hostname:             hostname,
 			})
 
 		}
@@ -637,7 +745,19 @@ func (s *EC2Service) KillCluster(ctx context.Context, clusterID string) error {
 	}
 
 	if s.route53Enabled {
-		err, has := s.hasSrvRecord(ctx, c.ID)
+		has, err := s.hasARecord(ctx, c)
+		if err != nil {
+			return err
+		}
+
+		if has {
+			err = s.removeARecords(ctx, c)
+			if err != nil {
+				return err
+			}
+		}
+
+		has, err = s.hasSrvRecord(ctx, c.ID)
 		if err != nil {
 			return err
 		}

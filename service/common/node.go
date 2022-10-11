@@ -1486,3 +1486,25 @@ func (n *Node) RunCBCollect() ([]byte, error) {
 func (n *Node) VersionTuple() helper.VersionTuple {
 	return helper.Tuple(n.Version)
 }
+
+func (n *Node) CreateHostsFile() error {
+	client, err := newClient(n.SshLogin)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// append to hosts file
+	err = session.Run(fmt.Sprintf("echo '127.0.0.1 %s' | sudo tee -a /etc/hosts", n.HostName))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
