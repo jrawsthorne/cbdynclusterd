@@ -194,24 +194,13 @@ func (m *Manager) setupNewCluster() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	glog.Infof("Set data memory quota to %d", memoryQuota)
-	if err := epnode.SetupMemoryQuota(memoryQuota); err != nil {
-		return "", err
+
+	clusterInitOpts := ClusterInitOpts{
+		KVMemoryQuota:      memoryQuota,
+		IndexerStorageMode: m.Config.StorageMode,
 	}
 
-	if m.Config.UseHostname {
-		glog.Infof("Set hostname to entry point node")
-		if err := epnode.Rename(epnode.HostName); err != nil {
-			return "", err
-		}
-	}
-
-	glog.Info("SetupInititalService")
-	if err := epnode.SetupInitialService(); err != nil {
-		return "", err
-	}
-
-	if err := epnode.InitNewCluster(m.Config); err != nil {
+	if err := epnode.ClusterInit(clusterInitOpts); err != nil {
 		return "", err
 	}
 

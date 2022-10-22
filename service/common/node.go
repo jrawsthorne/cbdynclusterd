@@ -141,35 +141,6 @@ func (n *Node) AddNode(newNode *Node, services string) error {
 	return err
 }
 
-func (n *Node) InitNewCluster(config Config) error {
-	err := n.SetMemoryQuota(config.MemoryQuota)
-	if err != nil {
-		return err
-	}
-	if config.StorageMode != "" {
-		glog.Infof("Set storage mode to %s", config.StorageMode)
-		if err = n.SetStorageMode(config.StorageMode); err != nil {
-			return err
-		}
-	}
-	return n.Provision()
-}
-
-func (n *Node) Provision() error {
-	body := fmt.Sprintf("port=SAME&username=%s&password=%s", n.RestLogin.Username, n.RestLogin.Password)
-
-	restParam := &helper.RestCall{
-		ExpectedCode: 200,
-		Method:       "POST",
-		Path:         helper.PSettingsWeb,
-		Cred:         n.RestLogin,
-		Body:         body,
-		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
-	}
-	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
-	return err
-}
-
 func (n *Node) ManageExternalListener(enable bool) error {
 	setting := "off"
 	path := helper.PDisableExternalListener
@@ -249,21 +220,6 @@ func (n *Node) AllowStrictEncryption() error {
 	return err
 }
 
-func (n *Node) SetMemoryQuota(quota string) error {
-	body := fmt.Sprintf("memoryQuota=%s&ftsMemoryQuota=%d", quota, helper.FtsDefaultMemoryQuota)
-
-	restParam := &helper.RestCall{
-		ExpectedCode: 200,
-		Method:       "POST",
-		Path:         helper.PPoolsDefault,
-		Cred:         n.RestLogin,
-		Body:         body,
-		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
-	}
-	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
-	return err
-}
-
 func (n *Node) GetMemUsedStats(bucket string) (*helper.MemUsedStats, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 	err := n.RunSsh(&stdoutBuf, &stderrBuf, "/opt/couchbase/bin/cbstats  localhost -u "+n.RestLogin.Username+" -p "+n.RestLogin.Password+" all -b "+bucket)
@@ -304,50 +260,6 @@ func (n *Node) GetMemUsedStats(bucket string) (*helper.MemUsedStats, error) {
 		Used:         actual,
 		Uncompressed: uncompressed,
 	}, nil
-}
-
-func (n *Node) Rename(hostname string) error {
-	body := fmt.Sprintf("hostname=%s", hostname)
-
-	restParam := &helper.RestCall{
-		ExpectedCode: 200,
-		Method:       "POST",
-		Path:         helper.PRename,
-		Cred:         n.RestLogin,
-		Body:         body,
-		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
-		RetryOnCode:  400,
-	}
-	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
-	if err == nil {
-		glog.Infof("Succesfully renamed to %s", hostname)
-	} else {
-		glog.Errorf("Error while renaming to %s:%s", hostname, err)
-	}
-
-	return err
-
-}
-
-func (n *Node) SetupMemoryQuota(memoryQuota int) error {
-	body := fmt.Sprintf("memoryQuota=%d", memoryQuota)
-
-	restParam := &helper.RestCall{
-		ExpectedCode: 200,
-		Method:       "POST",
-		Path:         helper.PPoolsDefault,
-		Cred:         n.RestLogin,
-		Body:         body,
-		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
-	}
-	_, err := helper.RestRetryer(helper.RestRetry, restParam, helper.GetResponse)
-	if err == nil {
-		glog.Infof("Succesfully set memoryQuota to %d", memoryQuota)
-	} else {
-		glog.Errorf("Error while setting memoryQuota:%s", err)
-	}
-
-	return err
 }
 
 func (n *Node) setAutoFailover(body string) error {
@@ -392,26 +304,30 @@ func (n *Node) IsAutoFailoverEnabled() (bool, int, error) {
 	return enabled, timeout, nil
 }
 
-func (n *Node) SetupInitialService() error {
-	glog.Infof("SetupInitialService for %s", n.HostName)
-	body := fmt.Sprintf("services=%s", url.QueryEscape(n.Services))
+type ClusterInitOpts struct {
+	KVMemoryQuota      int
+	IndexerStorageMode string
+}
 
+func (n *Node) ClusterInit(opts ClusterInitOpts) error {
+	body := fmt.Sprintf("hostname=%s", n.HostName)
+	body += fmt.Sprintf("&services=%s", url.QueryEscape(n.Services))
+	body += fmt.Sprintf("&memoryQuota=%d", opts.KVMemoryQuota)
+	body += fmt.Sprintf("&ftsMemoryQuota=%d", helper.FtsDefaultMemoryQuota)
+	if opts.IndexerStorageMode != "" {
+		body += fmt.Sprintf("&indexerStorageMode=%s", opts.IndexerStorageMode)
+	}
+	body += fmt.Sprintf("&port=SAME&username=%s&password=%s", n.RestLogin.Username, n.RestLogin.Password)
 	restParam := &helper.RestCall{
 		ExpectedCode: 200,
 		RetryOnCode:  400,
 		Method:       "POST",
-		Path:         helper.PSetupServices,
+		Path:         helper.ClusterInit,
 		Cred:         n.RestLogin,
 		Body:         body,
 		Header:       map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}
 	_, err := helper.RestRetryer(20, restParam, helper.GetResponse)
-	if err == nil {
-		glog.Infof("SetupInitialService for %s with services %s", n.HostName, n.Services)
-	} else {
-		glog.Errorf("SetupInitialService:%s", err)
-	}
-
 	return err
 }
 
