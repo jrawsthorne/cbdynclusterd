@@ -337,11 +337,34 @@ func (s *EC2Service) hasARecords(ctx context.Context, cluster *cluster.Cluster) 
 }
 
 func (s *EC2Service) createARecords(ctx context.Context, cluster *cluster.Cluster) error {
-	return s.changeARecords(ctx, cluster, route53types.ChangeActionCreate)
+	changeInfo, err := s.changeARecords(ctx, cluster, route53types.ChangeActionCreate)
+	if err != nil {
+		return err
+	}
+
+	// wait for dns records to propagate
+	timeout := time.Now().Add(time.Minute * 2)
+	for {
+		if time.Now().After(timeout) {
+			return errors.New("timeout waiting for dns records to propagate")
+		}
+
+		out, err := s.route53Client.GetChange(ctx, &route53.GetChangeInput{Id: changeInfo.Id})
+		if err != nil {
+			return err
+		}
+
+		if out.ChangeInfo.Status == route53types.ChangeStatusInsync {
+			return nil
+		}
+
+		time.Sleep(time.Second * 5)
+	}
 }
 
 func (s *EC2Service) removeARecords(ctx context.Context, cluster *cluster.Cluster) error {
-	return s.changeARecords(ctx, cluster, route53types.ChangeActionDelete)
+	_, err := s.changeARecords(ctx, cluster, route53types.ChangeActionDelete)
+	return err
 }
 
 func (s *EC2Service) removeSrvRecords(ctx context.Context, cluster *cluster.Cluster) error {
@@ -398,7 +421,7 @@ func (s *EC2Service) changeSrvRecords(ctx context.Context, cluster *cluster.Clus
 	return err
 }
 
-func (s *EC2Service) changeARecords(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) error {
+func (s *EC2Service) changeARecords(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) (*route53types.ChangeInfo, error) {
 	changes := make([]route53types.Change, 0, len(cluster.Nodes))
 	for _, node := range cluster.Nodes {
 		changes = append(changes, route53types.Change{
@@ -416,14 +439,14 @@ func (s *EC2Service) changeARecords(ctx context.Context, cluster *cluster.Cluste
 		})
 	}
 
-	_, err := s.route53Client.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
+	out, err := s.route53Client.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53types.ChangeBatch{
 			Changes: changes,
 		},
 		HostedZoneId: aws.String(s.hostedZoneId),
 	})
 
-	return err
+	return out.ChangeInfo, err
 }
 
 func (s *EC2Service) runInstances(ctx context.Context, clusterID, serverVersion string, ami *string, instanceCount int, instanceType types.InstanceType) ([]string, error) {
@@ -572,30 +595,38 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	if s.route53Enabled {
-		// we need to wait until the instance is ready before we can ssh in and update the hosts file
-		err = ec2.NewInstanceStatusOkWaiter(s.client).Wait(ctx, &ec2.DescribeInstanceStatusInput{
-			InstanceIds: instanceIds,
-		}, 5*time.Minute)
-		if err != nil {
-			return nil, err
-		}
-
-		connCtx, err := s.connectionContext(clusterID)
-		if err != nil {
-			return nil, err
-		}
-
-		// allow nodes to listen on custom hostnames
-		err = common.UpdateHostsFile(ctx, s, clusterID, connCtx)
+		err = tryUpdateHostsFile(ctx, s, clusterID)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return instanceIds, nil
+}
+
+func tryUpdateHostsFile(ctx context.Context, s *EC2Service, clusterID string) error {
+	connCtx, err := s.connectionContext(clusterID)
+	if err != nil {
+		return err
+	}
+
+	timeout := time.Now().Add(time.Minute * 5)
+	for {
+		if time.Now().After(timeout) {
+			return errors.New("timeout trying to update hosts file")
+		}
+
+		// allow nodes to listen on custom hostnames
+		err = common.UpdateHostsFile(ctx, s, clusterID, connCtx)
+		if err == nil {
+			return nil
+		}
+
+		log.Printf("update hosts file failed with %v", err)
+
+		time.Sleep(time.Second * 5)
+	}
 }
 
 func (s *EC2Service) getFilteredClusters(ctx context.Context, filters []types.Filter) ([]*cluster.Cluster, error) {
