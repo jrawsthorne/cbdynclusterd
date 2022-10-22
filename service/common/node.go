@@ -15,7 +15,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/couchbaselabs/cbdynclusterd/cluster"
@@ -74,7 +73,7 @@ func (n *Node) getId() string {
 
 func (n *Node) Rebalance(remaining, failedOver, toRemove []Node) error {
 	var ejectedId []string
-	var ejectedIds map[string]bool
+	ejectedIds := make(map[string]bool)
 	for _, n := range failedOver {
 		ejectedId = append(ejectedId, n.OtpNode)
 		ejectedIds[n.OtpNode] = true
@@ -206,7 +205,7 @@ func (n *Node) SetLowMagmaMinMemoryQuote() error {
 }
 
 func (n *Node) AllowStrictEncryption() error {
-	body := fmt.Sprintf("canEnableStrictEncryption=true")
+	body := "canEnableStrictEncryption=true"
 
 	restParam := &helper.RestCall{
 		ExpectedCode: 200,
@@ -296,6 +295,9 @@ func (n *Node) IsAutoFailoverEnabled() (bool, int, error) {
 		Cred:         n.RestLogin,
 	}
 	resp, err := helper.RestRetryer(20, restParam, helper.GetResponse)
+	if err != nil {
+		return false, 0, err
+	}
 	if err = json.Unmarshal([]byte(resp), &parsed); err != nil {
 		return false, 0, err
 	}
@@ -514,7 +516,7 @@ func (n *Node) WaitForBucketReady() error {
 				return nil
 			}
 		case <-time.After(helper.WaitTimeout):
-			return errors.New("Timeout while waiting for bucket ready")
+			return errors.New("timeout while waiting for bucket ready")
 		}
 	}
 }
@@ -635,58 +637,11 @@ func (n *Node) PollJoinReady(chErr chan error) {
 				time.Sleep(1 * time.Second)
 			}
 		case <-time.After(helper.RestTimeout):
-			chErr <- errors.New("Timeout while polling join ready")
+			chErr <- errors.New("timeout while polling join ready")
 			return
 		}
 
 	}
-}
-
-func (n *Node) PollCompressionMode(bucket, mode string) error {
-	var err error
-	params := &helper.RestCall{
-		ExpectedCode: 200,
-		Method:       "GET",
-		Path:         helper.PBuckets + "/" + bucket,
-		Cred:         n.RestLogin,
-	}
-
-	info := make(chan map[string]interface{})
-
-CompressionLoop:
-	for {
-		resp, err := helper.RestRetryer(helper.RestRetry, params, helper.GetResponse)
-		if err != nil {
-			return err
-		}
-
-		//glog.Infof("resp=%s", resp)
-		var parsed map[string]interface{}
-		if err := json.Unmarshal([]byte(resp), &parsed); err != nil {
-			return err
-		}
-
-		go func() {
-			info <- parsed
-		}()
-		select {
-		case status := <-info:
-			if status["compressionMode"].(string) == mode {
-				err = nil
-				glog.Infof("Compression mode switched to %s", mode)
-				break CompressionLoop
-			} else {
-				err = nil
-				glog.Infof("Compression mode is still %s", status["compressionMode"].(string))
-				time.Sleep(1 * time.Second)
-			}
-		case <-time.After(helper.RestTimeout):
-			err = errors.New("Timeout while checking compression mode")
-			break CompressionLoop
-		}
-	}
-
-	return err
 }
 
 func (n *Node) PollRebalance() error {
@@ -733,7 +688,7 @@ func (n *Node) PollRebalance() error {
 				time.Sleep(1 * time.Second)
 			}
 		case <-time.After(helper.RestTimeout):
-			return errors.New("Timeout while rebalancing")
+			return errors.New("timeout while rebalancing")
 		}
 	}
 
@@ -821,7 +776,7 @@ func (n *Node) pollSampleBucketCollections(s string) error {
 
 	for {
 		if time.Now().After(deadline) {
-			return errors.New("Timeout while loading sample bucket.")
+			return errors.New("timeout while loading sample bucket")
 		}
 
 		resp, err := helper.RestRetryer(helper.RestRetry, params, helper.GetResponse)
@@ -879,7 +834,7 @@ func (n *Node) pollSampleBucket(s string) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return errors.New("Timeout while loading sample bucket.")
+			return errors.New("timeout while loading sample bucket")
 		}
 	}
 }
@@ -929,7 +884,7 @@ func (n *Node) restCallToAux(fn func(RespNode, *helper.Cred, chan error), restLo
 				return res
 			}
 		case <-time.After(helper.RestTimeout):
-			return errors.New("Timeout while restCallToAux")
+			return errors.New("timeout while restCallToAux")
 		}
 	}
 }
@@ -1058,27 +1013,6 @@ func (n *Node) GetInfo() (*RefInfo, error) {
 		return nil, err
 	}
 	return &refInfo, nil
-}
-
-func (n *Node) StartServer(wg *sync.WaitGroup) {
-	glog.Infof("In StartServer, my host is :%p:%s", n, n.HostName)
-	/*var stdoutBuf, stderrBuf bytes.Buffer
-	var cmdList []string
-	cmdList = append(cmdList,"service couchbase-server start");
-	cmdList = append(cmdList,"pkill -CONT -f memcached");
-	cmdList = append(cmdList,"pkill -CONT -f beam.smp");
-	cmdList = append(cmdList,"iptables -F");
-	cmdList = append(cmdList,"iptables -t nat -F");
-
-	for _, cmd := range cmdList {
-		glog.Infof("running %s on %s", cmd, n.HostName)
-		stdoutBuf.Reset()
-		stderrBuf.Reset()
-		err := n.RunSsh(&stdoutBuf, &stderrBuf, cmd)
-
-		if err != nil { glog.Fatalf("Failed to start couchbase server:%s:%s", n.HostName, err) }
-	}*/
-	wg.Done()
 }
 
 func (n *Node) GetSystemInfo() OsInfo {
@@ -1239,11 +1173,11 @@ func newClient(sshLogin *helper.Cred) (*ssh.Client, error) {
 	} else {
 		key, err := ioutil.ReadFile(sshLogin.KeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("Reading private key file failed %v", err)
+			return nil, fmt.Errorf("reading private key file failed %v", err)
 		}
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
-			return nil, fmt.Errorf("Parsing private key file failed %v", err)
+			return nil, fmt.Errorf("parsing private key file failed %v", err)
 		}
 		sshConfig.Auth = []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
@@ -1258,7 +1192,7 @@ func newSession(sshLogin *helper.Cred) (*ssh.Session, error) {
 	connection, err := newClient(sshLogin)
 
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to dial:%s", err))
+		return nil, fmt.Errorf("failed to dial:%s", err)
 	}
 
 	session, err := connection.NewSession()
@@ -1304,7 +1238,7 @@ func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKe
 
 	err = sftpClient.MkdirAll("/opt/couchbase/var/lib/couchbase/inbox")
 	if err != nil {
-		return fmt.Errorf("Failed to create node inbox: %s\n", err)
+		return fmt.Errorf("failed to create node inbox: %s", err)
 	}
 
 	err = cbcerthelper.WriteRemoteCert("/opt/couchbase/var/lib/couchbase/inbox/chain.pem", cbcerthelper.CertTypeCertificate,
@@ -1321,7 +1255,7 @@ func (n *Node) SetupCert(cas []*x509.Certificate, caPrivateKeys []*rsa.PrivateKe
 	if supportsMultipleRoots {
 		err = sftpClient.MkdirAll("/opt/couchbase/var/lib/couchbase/inbox/CA")
 		if err != nil {
-			return fmt.Errorf("Failed to create CA inbox: %v\n", err)
+			return fmt.Errorf("failed to create CA inbox: %v", err)
 		}
 
 		for i, cert := range cas {

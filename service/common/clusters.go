@@ -106,7 +106,7 @@ func AddSampleBucket(ctx context.Context, s service.ClusterService, clusterID st
 	}
 
 	if helper.SampleBucketsCount[opts.SampleBucket] == 0 {
-		return errors.New("Unknown sample bucket")
+		return errors.New("unknown sample bucket")
 	}
 
 	if len(c.Nodes) == 0 {
