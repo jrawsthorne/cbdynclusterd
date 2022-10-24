@@ -121,7 +121,7 @@ func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateC
 		return errors.New("cannot allocate clusters with more than 10 nodes")
 	}
 
-	if err := common.GetConfigRepo(s.aliasRepoPath); err != nil {
+	if err := common.GetConfigRepo(ctx, s.aliasRepoPath); err != nil {
 		log.Printf("Get config failed: %v", err)
 		return err
 	}
@@ -152,7 +152,7 @@ func (s *EC2Service) AllocateCluster(ctx context.Context, opts service.AllocateC
 	return nil
 }
 
-func (s *EC2Service) buildAMI(imageName string, nodeVersion *common.NodeVersion) error {
+func (s *EC2Service) buildAMI(ctx context.Context, imageName string, nodeVersion *common.NodeVersion) error {
 	log.Printf("Downloading build %s to /tmp", nodeVersion.ToPkgName())
 
 	localFileName := fmt.Sprintf("/tmp/%s", nodeVersion.ToPkgName())
@@ -169,7 +169,12 @@ func (s *EC2Service) buildAMI(imageName string, nodeVersion *common.NodeVersion)
 
 	client := http.Client{}
 
-	resp, err := client.Get(remoteFileName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, remoteFileName, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -181,7 +186,7 @@ func (s *EC2Service) buildAMI(imageName string, nodeVersion *common.NodeVersion)
 		return err
 	}
 
-	err = CallPacker(PackerOptions{
+	err = CallPacker(ctx, PackerOptions{
 		BuildPkg:       nodeVersion.ToPkgName(),
 		AmiName:        imageName,
 		Arch:           nodeVersion.Arch,
@@ -223,11 +228,15 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 		*waitChans = append(*waitChans, waitChan)
 		s.mu.Unlock()
 		log.Printf("Image %s is already being built, waiting...", imageName)
+
+		childCtx, cancel := context.WithTimeout(ctx, time.Hour)
+		defer cancel()
+
 		select {
+		case <-childCtx.Done():
+			return errors.New("context timed out waiting for image to be built")
 		case err := <-waitChan:
 			return err
-		case <-time.After(1 * time.Hour):
-			return errors.New("timed out waiting for image to be built")
 		}
 	}
 
@@ -237,7 +246,7 @@ func (s *EC2Service) ensureImageExists(ctx context.Context, nodeVersion *common.
 
 	log.Printf("No image found for %s, building...", imageName)
 
-	err = s.buildAMI(imageName, nodeVersion)
+	err = s.buildAMI(ctx, imageName, nodeVersion)
 
 	// inform any waiters
 	s.mu.Lock()
@@ -284,7 +293,6 @@ func (s *EC2Service) hasSrvRecords(ctx context.Context, clusterID string) (bool,
 		}
 
 		out, err := s.route53Client.ListResourceRecordSets(ctx, &input)
-
 		if err != nil {
 			return false, err
 		}
@@ -315,7 +323,6 @@ func (s *EC2Service) hasARecords(ctx context.Context, cluster *cluster.Cluster) 
 		}
 
 		out, err := s.route53Client.ListResourceRecordSets(ctx, &input)
-
 		if err != nil {
 			return false, err
 		}
@@ -336,29 +343,33 @@ func (s *EC2Service) hasARecords(ctx context.Context, cluster *cluster.Cluster) 
 	return true, nil
 }
 
-func (s *EC2Service) createARecords(ctx context.Context, cluster *cluster.Cluster) error {
-	changeInfo, err := s.changeARecords(ctx, cluster, route53types.ChangeActionCreate)
-	if err != nil {
-		return err
-	}
+func (s *EC2Service) createARecords(ctx context.Context, cluster *cluster.Cluster) (*route53types.ChangeInfo, error) {
+	return s.changeARecords(ctx, cluster, route53types.ChangeActionCreate)
+}
 
-	// wait for dns records to propagate
-	timeout := time.Now().Add(time.Minute * 2)
+func (s *EC2Service) waitForDNSPropagation(ctx context.Context, changeID *string) error {
+	childCtx, cancel := context.WithTimeout(ctx, time.Minute*2)
+	defer cancel()
+
+	const sleep = time.Second * 5
+	timer := time.NewTimer(0)
+
 	for {
-		if time.Now().After(timeout) {
-			return errors.New("timeout waiting for dns records to propagate")
-		}
+		select {
+		case <-childCtx.Done():
+			return childCtx.Err()
+		case <-timer.C:
+			out, err := s.route53Client.GetChange(ctx, &route53.GetChangeInput{Id: changeID})
+			if err != nil {
+				return err
+			}
 
-		out, err := s.route53Client.GetChange(ctx, &route53.GetChangeInput{Id: changeInfo.Id})
-		if err != nil {
-			return err
-		}
+			if out.ChangeInfo.Status == route53types.ChangeStatusInsync {
+				return nil
+			}
 
-		if out.ChangeInfo.Status == route53types.ChangeStatusInsync {
-			return nil
+			timer.Reset(sleep)
 		}
-
-		time.Sleep(time.Second * 5)
 	}
 }
 
@@ -368,14 +379,15 @@ func (s *EC2Service) removeARecords(ctx context.Context, cluster *cluster.Cluste
 }
 
 func (s *EC2Service) removeSrvRecords(ctx context.Context, cluster *cluster.Cluster) error {
-	return s.changeSrvRecords(ctx, cluster, route53types.ChangeActionDelete)
+	_, err := s.changeSrvRecords(ctx, cluster, route53types.ChangeActionDelete)
+	return err
 }
 
-func (s *EC2Service) createSrvRecords(ctx context.Context, cluster *cluster.Cluster) error {
+func (s *EC2Service) createSrvRecords(ctx context.Context, cluster *cluster.Cluster) (*route53types.ChangeInfo, error) {
 	return s.changeSrvRecords(ctx, cluster, route53types.ChangeActionCreate)
 }
 
-func (s *EC2Service) changeSrvRecords(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) error {
+func (s *EC2Service) changeSrvRecords(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) (*route53types.ChangeInfo, error) {
 	hostnames := make([]string, 0, len(cluster.Nodes))
 	for _, node := range cluster.Nodes {
 		hostnames = append(hostnames, node.Hostname)
@@ -411,14 +423,14 @@ func (s *EC2Service) changeSrvRecords(ctx context.Context, cluster *cluster.Clus
 		})
 	}
 
-	_, err := s.route53Client.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
+	out, err := s.route53Client.ChangeResourceRecordSets(ctx, &route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53types.ChangeBatch{
 			Changes: changes,
 		},
 		HostedZoneId: aws.String(s.hostedZoneId),
 	})
 
-	return err
+	return out.ChangeInfo, err
 }
 
 func (s *EC2Service) changeARecords(ctx context.Context, cluster *cluster.Cluster, action route53types.ChangeAction) (*route53types.ChangeInfo, error) {
@@ -524,7 +536,6 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 			},
 		},
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +553,6 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 	var instanceIds []string
 
 	instanceIds, err = s.runInstances(ctx, clusterID, options.ServerVersion, ami, instanceCount, instanceType)
-
 	if err != nil {
 		return nil, err
 	}
@@ -585,13 +595,23 @@ func (s *EC2Service) allocateNodes(ctx context.Context, clusterID string, opts [
 			return nil, err
 		}
 
-		err = s.createARecords(ctx, cluster)
+		aRecordsChangeInfo, err := s.createARecords(ctx, cluster)
 		if err != nil {
 			return nil, err
 		}
 
 		// srv records point to the custom hostnames
-		err = s.createSrvRecords(ctx, cluster)
+		srvRecordsChangeInfo, err := s.createSrvRecords(ctx, cluster)
+		if err != nil {
+			return nil, err
+		}
+
+		err = s.waitForDNSPropagation(ctx, aRecordsChangeInfo.Id)
+		if err != nil {
+			return nil, err
+		}
+
+		err = s.waitForDNSPropagation(ctx, srvRecordsChangeInfo.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -611,21 +631,27 @@ func tryUpdateHostsFile(ctx context.Context, s *EC2Service, clusterID string) er
 		return err
 	}
 
-	timeout := time.Now().Add(time.Minute * 5)
+	childCtx, cancel := context.WithTimeout(ctx, time.Minute*5)
+	defer cancel()
+
+	timer := time.NewTimer(0)
+	const sleep = time.Second * 5
+
 	for {
-		if time.Now().After(timeout) {
-			return errors.New("timeout trying to update hosts file")
+		select {
+		case <-childCtx.Done():
+			return childCtx.Err()
+		case <-timer.C:
+			// allow nodes to listen on custom hostnames
+			err = common.UpdateHostsFile(ctx, s, clusterID, connCtx)
+			if err == nil {
+				return nil
+			}
+
+			log.Printf("update hosts file failed with %v", err)
+
+			timer.Reset(sleep)
 		}
-
-		// allow nodes to listen on custom hostnames
-		err = common.UpdateHostsFile(ctx, s, clusterID, connCtx)
-		if err == nil {
-			return nil
-		}
-
-		log.Printf("update hosts file failed with %v", err)
-
-		time.Sleep(time.Second * 5)
 	}
 }
 
@@ -925,10 +951,14 @@ func (s *EC2Service) SetupTrustedCert(ctx context.Context, clusterID string) err
 	}
 
 	for range nodes {
-		hostsErr := <-recv
-		if hostsErr != nil {
-			err = hostsErr
-			continue
+		select {
+		case hostsErr := <-recv:
+			if hostsErr != nil {
+				err = hostsErr
+				continue
+			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 

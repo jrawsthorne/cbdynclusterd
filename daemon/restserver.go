@@ -157,31 +157,40 @@ func (d *daemon) HttpCreateCluster(w http.ResponseWriter, r *http.Request) {
 		s = d.ec2Service
 	}
 
+	timer := time.NewTimer(0)
+	const sleep = time.Minute
+
+Loop:
 	for {
-		err = s.AllocateCluster(reqCtx, clusterOpts)
-		if err == service.MaxCapacityError {
-			// update timeout and try again
-			clusterOpts.Deadline = time.Now().Add(timeout)
-
-			err = d.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
-				meta.Timeout = clusterOpts.Deadline
-				return meta, nil
-			})
-
-			if err == nil {
-				time.Sleep(time.Duration(1) * time.Minute)
-				continue
-			}
-
-			// fall through if error updating timeout
-		}
-		// allocate or meta update failed
-		if err != nil {
-			writeJSONError(w, err)
+		select {
+		case <-reqCtx.Done():
 			return
+		case <-timer.C:
+			err = s.AllocateCluster(reqCtx, clusterOpts)
+			if err == service.MaxCapacityError {
+				// update timeout and try again
+				clusterOpts.Deadline = time.Now().Add(timeout)
+
+				err = d.metaStore.UpdateClusterMeta(clusterID, func(meta store.ClusterMeta) (store.ClusterMeta, error) {
+					meta.Timeout = clusterOpts.Deadline
+					return meta, nil
+				})
+
+				if err == nil {
+					timer.Reset(sleep)
+					continue
+				}
+
+				// fall through if error updating timeout
+			}
+			// allocate or meta update failed
+			if err != nil {
+				writeJSONError(w, err)
+				return
+			}
+			// successfully allocated cluster
+			break Loop
 		}
-		// successfully allocated cluster
-		break
 	}
 
 	newClusterJson := NewClusterJSON{
@@ -248,7 +257,6 @@ func (d *daemon) HttpGetDockerHost(w http.ResponseWriter, r *http.Request) {
 		Port:     hostURI.Port(),
 	}
 	writeJsonResponse(w, jsonResp)
-	return
 }
 
 func HttpGetVersion(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +264,6 @@ func HttpGetVersion(w http.ResponseWriter, r *http.Request) {
 		Version: Version,
 	}
 	writeJsonResponse(w, jsonResp)
-	return
 }
 
 func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +385,6 @@ func (d *daemon) HttpSetupCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJsonResponse(w, jsonCluster)
-	return
 }
 
 func (d *daemon) HttpSetupClusterEncryption(w http.ResponseWriter, r *http.Request) {
@@ -886,7 +892,6 @@ func (d *daemon) HttpSetupClientCertAuth(w http.ResponseWriter, r *http.Request)
 		ClientKey:  certData.ClientKey,
 		ClientCert: certData.ClientCert,
 	})
-	return
 }
 
 func (d *daemon) HttpBuildImage(w http.ResponseWriter, r *http.Request) {
@@ -1007,6 +1012,10 @@ func (d *daemon) HttpCreateCloudCluster(w http.ResponseWriter, r *http.Request) 
 		meta.Timeout = time.Now().Add(timeout)
 		return meta, nil
 	})
+	if err != nil {
+		writeJSONError(w, err)
+		return
+	}
 
 	dCtx, cancel := context.WithDeadline(reqCtx, time.Now().Add(helper.RestTimeout))
 	defer cancel()
