@@ -349,3 +349,7 @@ func (ds *DockerService) ConnString(ctx context.Context, clusterID string, useSS
 func (ds *DockerService) RunCBCollect(ctx context.Context, clusterID string) (*service.CBCollectResult, error) {
 	return common.RunCBCollect(ctx, ds, clusterID, service.ConnectContext{})
 }
+
+func (ds *DockerService) SetupCluster(clusterID string, opts service.ClusterSetupOptions) (string, error) {
+	return common.SetupCluster(opts, service.ConnectContext{})
+}

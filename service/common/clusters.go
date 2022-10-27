@@ -42,7 +42,7 @@ func NewNode(hostname string, clusterVersion string, connCtx service.ConnectCont
 	}
 }
 
-func SetupCluster(opts ClusterSetupOptions, connCtx service.ConnectContext) (string, error) {
+func SetupCluster(opts service.ClusterSetupOptions, connCtx service.ConnectContext) (string, error) {
 	services := opts.Services
 	clusterVersion := opts.Nodes[0].InitialServerVersion
 

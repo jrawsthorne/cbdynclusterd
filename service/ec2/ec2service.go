@@ -964,3 +964,12 @@ func (s *EC2Service) SetupTrustedCert(ctx context.Context, clusterID string) err
 
 	return err
 }
+
+func (s *EC2Service) SetupCluster(clusterID string, opts service.ClusterSetupOptions) (string, error) {
+	connCtx, err := s.connectionContext(clusterID)
+	if err != nil {
+		return "", err
+	}
+
+	return common.SetupCluster(opts, connCtx)
+}
